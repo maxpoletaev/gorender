@@ -1,8 +1,8 @@
 # GOXGL
 
-A purely software (no OpenGL or DirectX) 3D rasterizer written, that I’m trying 
-to build to learn more about 3D graphics programming. It uses raylib for window 
-management and input handling, but all the rendering is done from scratch.
+A purely software (no OpenGL or DirectX) 3D rasterizer, that I’m trying to build 
+to learn more about 3D graphics programming. It uses raylib for window management 
+and input handling, but all the rendering is done from scratch.
 
 ![screenshot](screenshot.png)
 
