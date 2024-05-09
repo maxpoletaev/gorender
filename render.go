@@ -31,7 +31,7 @@ func NewRenderer(fb *FrameBuffer) *Renderer {
 	}
 }
 
-func projectPoint(v Vec4, perspective *Mat4, center Vec2) Vec4 {
+func projectPoint(v Vec4, perspective *Matrix, center Vec2) Vec4 {
 	v = perspective.MultiplyVec4(v)
 
 	if v.W != 0 {
@@ -60,25 +60,29 @@ func (r *Renderer) Draw(mesh *Mesh, camera *Camera) {
 	r.fb.DotGrid(color.RGBA{100, 100, 100, 255}, 10)
 	r.resetTriangles(len(mesh.Faces))
 
-	transforms := NewIdentity().
-		Multiply(NewTranslation(mesh.Translation.X, mesh.Translation.Y, mesh.Translation.Z)).
-		Multiply(NewScale(mesh.Scale.X, mesh.Scale.Y, mesh.Scale.Z)).
-		Multiply(NewRotationX(mesh.Rotation.X)).
-		Multiply(NewRotationY(mesh.Rotation.Y)).
-		Multiply(NewRotationZ(mesh.Rotation.Z))
+	// World matrix is essentially a series of transformations applied to the mesh
+	// vertices that convert them from object's local space (model space) to world
+	// space. NOTE: The order is important!
+	worldMatrix := NewIdentity()
+	worldMatrix = NewScale(mesh.Scale.X, mesh.Scale.Y, mesh.Scale.Z).Multiply(worldMatrix)
+	worldMatrix = NewRotationZ(mesh.Rotation.Z).Multiply(worldMatrix)
+	worldMatrix = NewRotationY(mesh.Rotation.Y).Multiply(worldMatrix)
+	worldMatrix = NewRotationX(mesh.Rotation.X).Multiply(worldMatrix)
+	worldMatrix = NewTranslation(mesh.Translation.X, mesh.Translation.Y, mesh.Translation.Z).Multiply(worldMatrix)
 
+	// Calculate the parameters for the perspective projection
 	aspect := float64(r.fb.Width) / float64(r.fb.Height)
-	fov := camera.FOVAngle * (math.Pi / 180.0) // fov in radians
+	fovRadians := camera.FOVAngle * (math.Pi / 180.0)
 	zFar := -100.0
 	zNear := 0.1
 
 	center := Vec2{X: float64(r.fb.Width) / 2, Y: float64(r.fb.Height) / 2}
-	perspective := NewPerspective(fov, aspect, zNear, zFar)
+	perspective := NewPerspective(fovRadians, aspect, zNear, zFar)
 
 	for _, face := range mesh.Faces {
-		a := transforms.MultiplyVec4(mesh.Vertices[face.A].ToVec4())
-		b := transforms.MultiplyVec4(mesh.Vertices[face.B].ToVec4())
-		c := transforms.MultiplyVec4(mesh.Vertices[face.C].ToVec4())
+		a := worldMatrix.MultiplyVec4(mesh.Vertices[face.A].ToVec4())
+		b := worldMatrix.MultiplyVec4(mesh.Vertices[face.B].ToVec4())
+		c := worldMatrix.MultiplyVec4(mesh.Vertices[face.C].ToVec4())
 
 		if r.BackfaceCulling {
 			a3, b3, c3 := a.ToVec3(), b.ToVec3(), c.ToVec3()
@@ -90,18 +94,18 @@ func (r *Renderer) Draw(mesh *Mesh, camera *Camera) {
 			}
 		}
 
+		// Project the vertices to the screen coordinates
 		pa := projectPoint(a, &perspective, center)
 		pb := projectPoint(b, &perspective, center)
 		pc := projectPoint(c, &perspective, center)
 
-		t := Triangle{
+		// Add the triangle to the list of triangles to be rendered
+		r.triangles = append(r.triangles, Triangle{
 			A: Vec2{X: pa.X, Y: pa.Y},
 			B: Vec2{X: pb.X, Y: pb.Y},
 			C: Vec2{X: pc.X, Y: pc.Y},
 			Z: (a.Z + b.Z + c.Z) / 3.0,
-		}
-
-		r.triangles = append(r.triangles, t)
+		})
 	}
 
 	// Sort triangles by Z coordinate (painter's algorithm)
@@ -109,6 +113,7 @@ func (r *Renderer) Draw(mesh *Mesh, camera *Camera) {
 		return r.triangles[i].Z < r.triangles[j].Z
 	})
 
+	// Rasterize the triangles to the frame buffer
 	for _, t := range r.triangles {
 		a, b, c := t.A, t.B, t.C
 

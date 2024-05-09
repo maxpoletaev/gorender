@@ -25,7 +25,7 @@ func NewMesh(vertices []Vec3, faces []Face) *Mesh {
 	}
 }
 
-func (m *Mesh) Transform(matrices ...Mat4) {
+func (m *Mesh) Transform(matrices ...Matrix) {
 	mat := matrices[0]
 	for i := 1; i < len(matrices); i++ {
 		mat = mat.Multiply(matrices[i])

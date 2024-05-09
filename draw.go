@@ -2,26 +2,20 @@ package main
 
 import (
 	"image/color"
-	"sort"
-)
-
-const (
-	ZBufferMax = -1000000
+	"slices"
 )
 
 type FrameBuffer struct {
-	Width   int
-	Height  int
-	Pixels  []color.RGBA
-	ZBuffer []float64
+	Width  int
+	Height int
+	Pixels []color.RGBA
 }
 
 func NewFrameBuffer(width, height int) *FrameBuffer {
 	return &FrameBuffer{
-		Width:   width,
-		Height:  height,
-		Pixels:  make([]color.RGBA, width*height),
-		ZBuffer: make([]float64, width*height),
+		Width:  width,
+		Height: height,
+		Pixels: make([]color.RGBA, width*height),
 	}
 }
 
@@ -32,7 +26,6 @@ func (fb *FrameBuffer) Pixel(x, y int, c color.RGBA, z float64) {
 	}
 
 	fb.Pixels[idx] = c
-	fb.ZBuffer[idx] = z
 }
 
 func (fb *FrameBuffer) Rect(x, y, width, height int, c color.RGBA, z float64) {
@@ -49,18 +42,16 @@ func (fb *FrameBuffer) Rect(x, y, width, height int, c color.RGBA, z float64) {
 func (fb *FrameBuffer) DotGrid(c color.RGBA, step int) {
 	for y := step; y < fb.Height; y += step {
 		for x := step; x < fb.Width; x += step {
-			fb.Pixel(x, y, c, ZBufferMax)
+			fb.Pixel(x, y, c, 0)
 		}
 	}
 }
 
 func (fb *FrameBuffer) Fill(c color.RGBA) {
 	fb.Pixels[0] = c
-	fb.ZBuffer[0] = ZBufferMax
 
 	for i := 1; i < len(fb.Pixels); i *= 2 {
 		copy(fb.Pixels[i:], fb.Pixels[:i])
-		copy(fb.ZBuffer[i:], fb.ZBuffer[:i])
 	}
 }
 
@@ -89,6 +80,7 @@ func (fb *FrameBuffer) Line(x0, y0 int, x1, y1 int, c color.RGBA, z float64) {
 	yStep := float64(dy) / float64(sideLength)
 	curX, curY := float64(x0), float64(y0)
 
+	// TODO: Use Bresenham's line algorithm
 	for i := 0; i <= sideLength; i++ {
 		fb.Pixel(int(curX), int(curY), c, z)
 		curX += xStep
@@ -133,8 +125,15 @@ func (fb *FrameBuffer) triangleBottomHalf(x0, y0 int, x1, y1 int, x2, y2 int, c 
 func (fb *FrameBuffer) Triangle(x0, y0 int, x1, y1 int, x2, y2 int, c color.RGBA, z float64) {
 	verts := []struct{ x, y int }{{x0, y0}, {x1, y1}, {x2, y2}}
 
-	sort.Slice(verts, func(i, j int) bool {
-		return verts[i].y < verts[j].y
+	slices.SortFunc(verts, func(a, b struct{ x, y int }) int {
+		switch {
+		case a.y < b.y:
+			return -1
+		case a.y > b.y:
+			return 1
+		default:
+			return 0
+		}
 	})
 
 	// Sorted points

@@ -183,7 +183,6 @@ func main() {
 
 		// Draw the render texture to the screen
 		rl.BeginDrawing()
-		rl.ClearBackground(rl.Black)
 		rl.DrawTexturePro(
 			texture.Texture,
 			rl.Rectangle{0, 0, float32(fb.Width), float32(fb.Height)},
