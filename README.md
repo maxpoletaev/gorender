@@ -1,16 +1,16 @@
-# GOXGL
+# goxgl
 
 A purely software (no OpenGL or DirectX) 3D rasterizer, that I’m trying to build 
-to learn more about 3D graphics programming. It uses raylib for window management 
-and input handling, but all the rendering is done from scratch.
+to learn something about 3D graphics. It uses raylib for window management and 
+delivering pixels to the screen, but all the rendering is done from scratch in 
+Go with no external libraries.
 
 ![screenshot](screenshot.png)
 
 ## Building
 
-For this, you may need a C compiler (gcc or clang) and additional dependencies 
-required by raylib. See https://github.com/gen2brain/raylib-go#requirements
-for more details.
+For this, you may need a C compiler and additional dependencies required by 
+raylib. See https://github.com/gen2brain/raylib-go#requirements for details.
 
 ```
 $ make build

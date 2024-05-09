@@ -21,6 +21,7 @@ const (
 
 type Camera struct {
 	Position Vec3
+	FOVAngle float64
 }
 
 func drawText(x, y int32, text string) {
@@ -104,7 +105,7 @@ func main() {
 
 	filename := flag.Arg(0)
 	fb := NewFrameBuffer(viewWidth, viewHeight)
-	camera := Camera{Position: Vec3{0, 0, 0}}
+	camera := Camera{Position: Vec3{0, 0, 0}, FOVAngle: 45}
 	renderer := NewRenderer(fb)
 
 	mesh, err := loadMeshFromFile(filename)
@@ -113,7 +114,7 @@ func main() {
 	}
 
 	// Move away from the camera
-	mesh.Translation.Z = -10
+	mesh.Translation.Z = -5
 
 	var (
 		windowWidth  = int32(fb.Width * viewScale)

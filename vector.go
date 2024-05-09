@@ -116,3 +116,15 @@ type Vec4 struct {
 func (v Vec4) ToVec3() Vec3 {
 	return Vec3{X: v.X, Y: v.Y, Z: v.Z}
 }
+
+func (v Vec4) Add(other Vec4) Vec4 {
+	return Vec4{v.X + other.X, v.Y + other.Y, v.Z + other.Z, v.W + other.W}
+}
+
+func (v Vec4) Multiply(scalar float64) Vec4 {
+	return Vec4{v.X * scalar, v.Y * scalar, v.Z * scalar, v.W * scalar}
+}
+
+func (v Vec4) Divide(scalar float64) Vec4 {
+	return Vec4{v.X / scalar, v.Y / scalar, v.Z / scalar, v.W / scalar}
+}

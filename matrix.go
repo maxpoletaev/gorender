@@ -73,8 +73,25 @@ func NewRotationZ(angle float64) Mat4 {
 	}
 }
 
+func NewPerspective(fov, aspect, znear, zfar float64) Mat4 {
+	f := 1.0 / math.Tan(fov/2.0)
+	m := NewIdentity()
+
+	m.set(0, 0, f/aspect)
+	m.set(1, 1, f)
+	m.set(2, 2, zfar/(znear-zfar))
+	m.set(2, 3, (-zfar*znear)/(zfar-znear))
+	m.set(3, 2, 1)
+
+	return m
+}
+
 func (m *Mat4) at(row, col int) float64 {
 	return m[row*4+col]
+}
+
+func (m *Mat4) set(row, col int, value float64) {
+	m[row*4+col] = value
 }
 
 func (m Mat4) Multiply(other Mat4) Mat4 {

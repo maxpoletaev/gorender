@@ -27,11 +27,26 @@ func parseObjFace(line string) (Face, error) {
 
 	switch {
 	case strings.Contains(line, "//"):
-		_, err = fmt.Sscanf(line, "f %d//%d %d//%d %d//%d", &face.A, &discard, &face.B, &discard, &face.C, &discard)
+		_, err = fmt.Sscanf(
+			line, "f %d//%d %d//%d %d//%d",
+			&face.A, &discard,
+			&face.B, &discard,
+			&face.C, &discard,
+		)
 	case strings.Contains(line, "/"):
-		_, err = fmt.Sscanf(line, "f %d/%d/%d %d/%d/%d %d/%d/%d", &face.A, &discard, &discard, &face.B, &discard, &discard, &face.C, &discard, &discard)
+		_, err = fmt.Sscanf(
+			line, "f %d/%d/%d %d/%d/%d %d/%d/%d",
+			&face.A, &discard, &discard,
+			&face.B, &discard, &discard,
+			&face.C, &discard, &discard,
+		)
 	default:
-		_, err = fmt.Sscanf(line, "f %d %d %d", &face.A, &face.B, &face.C)
+		_, err = fmt.Sscanf(
+			line, "f %d %d %d",
+			&face.A,
+			&face.B,
+			&face.C,
+		)
 	}
 
 	// Indices are 1-based in .obj files.
