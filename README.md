@@ -38,3 +38,4 @@ $ ./goxgl models/suzanne.obj
  * [Scratchapixel](https://www.scratchapixel.com) 
  * [tinyrenderer](https://github.com/ssloy/tinyrenderer)
  * [Math for Game Developers](https://www.youtube.com/playlist?list=PLW3Zl3wyJwWOpdhYedlD-yCB7WQoHf-My)
+ * [OBJ file format](https://people.computing.clemson.edu/~dhouse/courses/405/docs/brief-obj-file-format.html)
