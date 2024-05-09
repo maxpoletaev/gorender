@@ -13,7 +13,7 @@ type FrameBuffer struct {
 	Width   int
 	Height  int
 	Pixels  []color.RGBA
-	ZBuffer []float32
+	ZBuffer []float64
 }
 
 func NewFrameBuffer(width, height int) *FrameBuffer {
@@ -21,11 +21,11 @@ func NewFrameBuffer(width, height int) *FrameBuffer {
 		Width:   width,
 		Height:  height,
 		Pixels:  make([]color.RGBA, width*height),
-		ZBuffer: make([]float32, width*height),
+		ZBuffer: make([]float64, width*height),
 	}
 }
 
-func (fb *FrameBuffer) Pixel(x, y int, c color.RGBA, z float32) {
+func (fb *FrameBuffer) Pixel(x, y int, c color.RGBA, z float64) {
 	idx := y*fb.Width + x
 	if idx < 0 || idx >= len(fb.Pixels) {
 		return
@@ -35,7 +35,7 @@ func (fb *FrameBuffer) Pixel(x, y int, c color.RGBA, z float32) {
 	fb.ZBuffer[idx] = z
 }
 
-func (fb *FrameBuffer) Rect(x, y, width, height int, c color.RGBA, z float32) {
+func (fb *FrameBuffer) Rect(x, y, width, height int, c color.RGBA, z float64) {
 	if x >= fb.Width || y >= fb.Height {
 		return
 	}
@@ -64,7 +64,7 @@ func (fb *FrameBuffer) Fill(c color.RGBA) {
 	}
 }
 
-func (fb *FrameBuffer) Line(x0, y0 int, x1, y1 int, c color.RGBA, z float32) {
+func (fb *FrameBuffer) Line(x0, y0 int, x1, y1 int, c color.RGBA, z float64) {
 	dx := x1 - x0
 	dy := y1 - y0
 
@@ -85,9 +85,9 @@ func (fb *FrameBuffer) Line(x0, y0 int, x1, y1 int, c color.RGBA, z float32) {
 		sideLength = dyAbs
 	}
 
-	xStep := float32(dx) / float32(sideLength)
-	yStep := float32(dy) / float32(sideLength)
-	curX, curY := float32(x0), float32(y0)
+	xStep := float64(dx) / float64(sideLength)
+	yStep := float64(dy) / float64(sideLength)
+	curX, curY := float64(x0), float64(y0)
 
 	for i := 0; i <= sideLength; i++ {
 		fb.Pixel(int(curX), int(curY), c, z)
@@ -96,15 +96,15 @@ func (fb *FrameBuffer) Line(x0, y0 int, x1, y1 int, c color.RGBA, z float32) {
 	}
 }
 
-func (fb *FrameBuffer) triangleTopHalf(x0, y0 int, x1, y1 int, x2, y2 int, c color.RGBA, z float32) {
+func (fb *FrameBuffer) triangleTopHalf(x0, y0 int, x1, y1 int, x2, y2 int, c color.RGBA, z float64) {
 	if y0 == y1 {
 		return
 	}
 
-	slope1 := float32(x1-x0) / float32(y1-y0)
-	slope2 := float32(x2-x0) / float32(y2-y0)
-	xStart := float32(x0)
-	xEnd := float32(x0)
+	slope1 := float64(x1-x0) / float64(y1-y0)
+	slope2 := float64(x2-x0) / float64(y2-y0)
+	xStart := float64(x0)
+	xEnd := float64(x0)
 
 	for y := y0; y <= y1; y++ {
 		fb.Line(int(xStart), y, int(xEnd), y, c, z)
@@ -113,15 +113,15 @@ func (fb *FrameBuffer) triangleTopHalf(x0, y0 int, x1, y1 int, x2, y2 int, c col
 	}
 }
 
-func (fb *FrameBuffer) triangleBottomHalf(x0, y0 int, x1, y1 int, x2, y2 int, c color.RGBA, z float32) {
+func (fb *FrameBuffer) triangleBottomHalf(x0, y0 int, x1, y1 int, x2, y2 int, c color.RGBA, z float64) {
 	if y1 == y2 {
 		return
 	}
 
-	slope1 := float32(x2-x0) / float32(y2-y0)
-	slope2 := float32(x2-x1) / float32(y2-y1)
-	xStart := float32(x2)
-	xEnd := float32(x2)
+	slope1 := float64(x2-x0) / float64(y2-y0)
+	slope2 := float64(x2-x1) / float64(y2-y1)
+	xStart := float64(x2)
+	xEnd := float64(x2)
 
 	for y := y2; y > y0; y-- {
 		fb.Line(int(xStart), y, int(xEnd), y, c, z)
@@ -130,7 +130,7 @@ func (fb *FrameBuffer) triangleBottomHalf(x0, y0 int, x1, y1 int, x2, y2 int, c 
 	}
 }
 
-func (fb *FrameBuffer) Triangle(x0, y0 int, x1, y1 int, x2, y2 int, c color.RGBA, z float32) {
+func (fb *FrameBuffer) Triangle(x0, y0 int, x1, y1 int, x2, y2 int, c color.RGBA, z float64) {
 	verts := []struct{ x, y int }{{x0, y0}, {x1, y1}, {x2, y2}}
 
 	sort.Slice(verts, func(i, j int) bool {
@@ -144,7 +144,7 @@ func (fb *FrameBuffer) Triangle(x0, y0 int, x1, y1 int, x2, y2 int, c color.RGBA
 
 	// Midpoint
 	my := verts[1].y
-	mx := int(float32((x2-x0)*(y1-y0))/float32(y2-y0)) + x0
+	mx := int(float64((x2-x0)*(y1-y0))/float64(y2-y0)) + x0
 
 	// Flat-bottom/flat-top algorithm
 	fb.triangleTopHalf(x0, y0, x1, y1, mx, my, c, z)

@@ -1,6 +1,8 @@
 package main
 
-type Mat4 [16]float32
+import "math"
+
+type Mat4 [16]float64
 
 func NewIdentity() Mat4 {
 	return Mat4{
@@ -11,7 +13,7 @@ func NewIdentity() Mat4 {
 	}
 }
 
-func NewScale(x, y, z float32) Mat4 {
+func NewScale(x, y, z float64) Mat4 {
 	return Mat4{
 		x, 0, 0, 0,
 		0, y, 0, 0,
@@ -20,7 +22,7 @@ func NewScale(x, y, z float32) Mat4 {
 	}
 }
 
-func NewTranslation(x, y, z float32) Mat4 {
+func NewTranslation(x, y, z float64) Mat4 {
 	return Mat4{
 		1, 0, 0, x,
 		0, 1, 0, y,
@@ -29,12 +31,12 @@ func NewTranslation(x, y, z float32) Mat4 {
 	}
 }
 
-func NewRotationX(angle float32) Mat4 {
+func NewRotationX(angle float64) Mat4 {
 	if angle == 0 {
 		return NewIdentity()
 	}
 
-	sin, cos := sin32(angle), cos32(angle)
+	sin, cos := math.Sin(angle), math.Cos(angle)
 	return Mat4{
 		1, 0, 0, 0,
 		0, cos, -sin, 0,
@@ -43,12 +45,12 @@ func NewRotationX(angle float32) Mat4 {
 	}
 }
 
-func NewRotationY(angle float32) Mat4 {
+func NewRotationY(angle float64) Mat4 {
 	if angle == 0 {
 		return NewIdentity()
 	}
 
-	sin, cos := sin32(angle), cos32(angle)
+	sin, cos := math.Sin(angle), math.Cos(angle)
 	return Mat4{
 		cos, 0, sin, 0,
 		0, 1, 0, 0,
@@ -57,12 +59,12 @@ func NewRotationY(angle float32) Mat4 {
 	}
 }
 
-func NewRotationZ(angle float32) Mat4 {
+func NewRotationZ(angle float64) Mat4 {
 	if angle == 0 {
 		return NewIdentity()
 	}
 
-	sin, cos := sin32(angle), cos32(angle)
+	sin, cos := math.Sin(angle), math.Cos(angle)
 	return Mat4{
 		cos, -sin, 0, 0,
 		sin, cos, 0, 0,
@@ -71,7 +73,7 @@ func NewRotationZ(angle float32) Mat4 {
 	}
 }
 
-func (m *Mat4) at(row, col int) float32 {
+func (m *Mat4) at(row, col int) float64 {
 	return m[row*4+col]
 }
 

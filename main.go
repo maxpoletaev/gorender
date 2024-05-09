@@ -155,11 +155,11 @@ func main() {
 
 			if deltaX != 0 || deltaY != 0 {
 				if rl.IsKeyDown(rl.KeyLeftShift) || rl.IsKeyDown(rl.KeyRightShift) {
-					mesh.Translation.X -= float32(deltaX) * 0.005
-					mesh.Translation.Y -= float32(deltaY) * 0.005
+					mesh.Translation.X -= float64(deltaX) * 0.005
+					mesh.Translation.Y -= float64(deltaY) * 0.005
 				} else {
-					mesh.Rotation.X += float32(deltaY) * 0.01
-					mesh.Rotation.Y += -float32(deltaX) * 0.01
+					mesh.Rotation.X += float64(deltaY) * 0.01
+					mesh.Rotation.Y += -float64(deltaX) * 0.01
 				}
 			}
 		}
@@ -169,7 +169,7 @@ func main() {
 
 		// Zoom in/out with the mouse wheel
 		if wheelMove := rl.GetMouseWheelMove(); wheelMove != 0 {
-			factor := float32(wheelMove) * 0.01
+			factor := float64(wheelMove) * 0.01
 			mesh.Scale.X += factor
 			mesh.Scale.Y += factor
 			mesh.Scale.Z += factor

@@ -9,7 +9,7 @@ import (
 )
 
 func parseObjVertex(line string) (Vec3, error) {
-	var x, y, z float32
+	var x, y, z float64
 	_, err := fmt.Sscanf(line, "v %f %f %f", &x, &y, &z)
 	return Vec3{x, y, z}, err
 }

@@ -2,7 +2,7 @@ package main
 
 type Triangle struct {
 	A, B, C Vec2
-	AvgZ    float32
+	Z       float64
 }
 
 type Face struct {

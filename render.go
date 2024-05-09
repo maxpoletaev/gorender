@@ -72,19 +72,19 @@ func (r *Renderer) Draw(mesh *Mesh, camera *Camera) {
 		}
 
 		t := Triangle{A: project2D(a), B: project2D(b), C: project2D(c)}
-		t.AvgZ = (a.Z + b.Z + c.Z) / 3.0
+		t.Z = (a.Z + b.Z + c.Z) / 3.0
 
 		r.triangles = append(r.triangles, t)
 	}
 
 	// Sort triangles by Z coordinate (painter's algorithm)
 	sort.Slice(r.triangles, func(i, j int) bool {
-		return r.triangles[i].AvgZ < r.triangles[j].AvgZ
+		return r.triangles[i].Z < r.triangles[j].Z
 	})
 
 	center := Vec2{
-		X: float32(r.fb.Width) / 2.0,
-		Y: float32(r.fb.Height) / 2.0,
+		X: float64(r.fb.Width) / 2.0,
+		Y: float64(r.fb.Height) / 2.0,
 	}
 
 	for _, t := range r.triangles {
@@ -99,20 +99,20 @@ func (r *Renderer) Draw(mesh *Mesh, camera *Camera) {
 				int(b.X), int(b.Y),
 				int(c.X), int(c.Y),
 				faceColor,
-				t.AvgZ,
+				t.Z,
 			)
 		}
 
 		if r.ShowEdges {
-			r.fb.Line(int(a.X), int(a.Y), int(b.X), int(b.Y), edgeColor, t.AvgZ)
-			r.fb.Line(int(b.X), int(b.Y), int(c.X), int(c.Y), edgeColor, t.AvgZ)
-			r.fb.Line(int(c.X), int(c.Y), int(a.X), int(a.Y), edgeColor, t.AvgZ)
+			r.fb.Line(int(a.X), int(a.Y), int(b.X), int(b.Y), edgeColor, t.Z)
+			r.fb.Line(int(b.X), int(b.Y), int(c.X), int(c.Y), edgeColor, t.Z)
+			r.fb.Line(int(c.X), int(c.Y), int(a.X), int(a.Y), edgeColor, t.Z)
 		}
 
 		if r.ShowVertices {
-			r.fb.Rect(int(a.X)-1, int(a.Y)-1, 3, 3, vertexColor, t.AvgZ)
-			r.fb.Rect(int(b.X)-1, int(b.Y)-1, 3, 3, vertexColor, t.AvgZ)
-			r.fb.Rect(int(c.X)-1, int(c.Y)-1, 3, 3, vertexColor, t.AvgZ)
+			r.fb.Rect(int(a.X)-1, int(a.Y)-1, 3, 3, vertexColor, t.Z)
+			r.fb.Rect(int(b.X)-1, int(b.Y)-1, 3, 3, vertexColor, t.Z)
+			r.fb.Rect(int(c.X)-1, int(c.Y)-1, 3, 3, vertexColor, t.Z)
 		}
 	}
 }
