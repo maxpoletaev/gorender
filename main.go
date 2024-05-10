@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"math"
 	"os"
 	"path"
 	"runtime/pprof"
@@ -112,8 +113,8 @@ func main() {
 		log.Fatalf("failed to load mesh: %s", err)
 	}
 
-	// Move away from the camera
-	mesh.Translation.Z = -5
+	mesh.Translation.Z = 3    // Move away from the camera
+	mesh.Rotation.Y = math.Pi // Rotate 180 degrees
 
 	var (
 		windowWidth  = int32(fb.Width * viewScale)
@@ -157,11 +158,11 @@ func main() {
 
 			if deltaX != 0 || deltaY != 0 {
 				if rl.IsKeyDown(rl.KeyLeftShift) || rl.IsKeyDown(rl.KeyRightShift) {
-					mesh.Translation.X -= float64(deltaX) * 0.005
+					mesh.Translation.X += float64(deltaX) * 0.005
 					mesh.Translation.Y -= float64(deltaY) * 0.005
 				} else {
-					mesh.Rotation.X += float64(deltaY) * 0.01
-					mesh.Rotation.Y += -float64(deltaX) * 0.01
+					mesh.Rotation.X -= float64(deltaY) * 0.01
+					mesh.Rotation.Y -= float64(deltaX) * 0.01
 				}
 			}
 		}

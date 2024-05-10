@@ -35,15 +35,17 @@ func NewRenderer(fb *FrameBuffer) *Renderer {
 func projectPoint(v Vec4, perspective *Matrix, center Vec2) Vec4 {
 	v = perspective.MultiplyVec4(v)
 
+	// Coordinates are normalized in the range [-1, 1]
 	if v.W != 0 {
 		v.X /= v.W
 		v.Y /= v.W
 		v.Z /= v.W
 	}
 
-	// Scale and translate to screen center
+	// Scale and translate to screen center.
+	// The Y axis is inverted because in screen coordinates the origin is in the top-left corner.
 	v.X = v.X*center.X + center.X
-	v.Y = v.Y*center.Y + center.Y
+	v.Y = v.Y*center.Y*-1 + center.Y
 
 	return v
 }
@@ -71,7 +73,7 @@ func (r *Renderer) project(mesh *Mesh, camera *Camera) {
 	// Calculate the parameters for the perspective projection
 	aspect := float64(r.fb.Width) / float64(r.fb.Height)
 	fovRadians := camera.FOVAngle * (math.Pi / 180.0)
-	zFar := -100.0
+	zFar := 100.0
 	zNear := 0.1
 
 	center := Vec2{X: float64(r.fb.Width) / 2, Y: float64(r.fb.Height) / 2}
@@ -81,7 +83,7 @@ func (r *Renderer) project(mesh *Mesh, camera *Camera) {
 	faceColor = color.RGBA{200, 200, 200, 255}
 
 	// Calculate the light vector
-	lightVector := Vec3{X: 0.5, Y: 0.5, Z: 0.5}.Normalize()
+	lightVector := Vec3{X: -0.5, Y: 0.5, Z: -1}.Normalize()
 
 	// Reuse the existing slice if possible
 	if cap(r.triangles) < len(mesh.Faces) {
@@ -91,11 +93,11 @@ func (r *Renderer) project(mesh *Mesh, camera *Camera) {
 	}
 
 	for _, face := range mesh.Faces {
-		a := worldMatrix.MultiplyVec4(mesh.Vertices[face.A].ToVec4())
-		b := worldMatrix.MultiplyVec4(mesh.Vertices[face.B].ToVec4())
-		c := worldMatrix.MultiplyVec4(mesh.Vertices[face.C].ToVec4())
+		v1 := worldMatrix.MultiplyVec4(mesh.Vertices[face.A].ToVec4())
+		v2 := worldMatrix.MultiplyVec4(mesh.Vertices[face.B].ToVec4())
+		v3 := worldMatrix.MultiplyVec4(mesh.Vertices[face.C].ToVec4())
 
-		a3, b3, c3 := a.ToVec3(), b.ToVec3(), c.ToVec3()
+		a3, b3, c3 := v1.ToVec3(), v2.ToVec3(), v3.ToVec3()
 		faceNormal := b3.Sub(a3).CrossProduct(c3.Sub(a3)).Normalize()
 		faceColor = color.RGBA{255, 255, 255, 255}
 
@@ -112,16 +114,16 @@ func (r *Renderer) project(mesh *Mesh, camera *Camera) {
 		}
 
 		// Project the vertices to the screen coordinates
-		pa := projectPoint(a, &perspective, center)
-		pb := projectPoint(b, &perspective, center)
-		pc := projectPoint(c, &perspective, center)
+		pa := projectPoint(v1, &perspective, center)
+		pb := projectPoint(v2, &perspective, center)
+		pc := projectPoint(v3, &perspective, center)
 
 		// Add the triangle to the list of triangles to be rendered
 		r.triangles = append(r.triangles, Triangle{
 			A:     Vec2{X: pa.X, Y: pa.Y},
 			B:     Vec2{X: pb.X, Y: pb.Y},
 			C:     Vec2{X: pc.X, Y: pc.Y},
-			Z:     (a.Z + b.Z + c.Z) / 3.0,
+			Z:     (pa.Z + pb.Z + pc.Z) / 3.0,
 			Color: faceColor,
 		})
 	}
