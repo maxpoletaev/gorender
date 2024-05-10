@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"image/color"
 	"math"
 	"sort"
@@ -12,6 +13,11 @@ var (
 	edgeColor   = color.RGBA{0, 0, 0, 255}
 )
 
+type DebugInfo struct {
+	X, Y int
+	Text string
+}
+
 type Renderer struct {
 	fb        *FrameBuffer
 	triangles []Triangle
@@ -21,6 +27,9 @@ type Renderer struct {
 	ShowFaces       bool
 	BackfaceCulling bool
 	Lighting        bool
+
+	Debug     bool
+	DebugInfo []DebugInfo
 }
 
 func NewRenderer(fb *FrameBuffer) *Renderer {
@@ -60,6 +69,9 @@ func colorIntensity(c color.RGBA, intensity float64) color.RGBA {
 }
 
 func (r *Renderer) project(mesh *Mesh, camera *Camera) {
+	r.triangles = r.triangles[:0]
+	r.DebugInfo = r.DebugInfo[:0]
+
 	// Calculate the world matrix, which is essentially a series of transformations
 	// applied to the mesh vertices that convert them from object's local space to
 	// world space. NOTE: The order is important!
@@ -77,22 +89,13 @@ func (r *Renderer) project(mesh *Mesh, camera *Camera) {
 	zNear := 0.1
 
 	center := Vec2{X: float64(r.fb.Width) / 2, Y: float64(r.fb.Height) / 2}
-
 	perspective := NewPerspective(fovRadians, aspect, zNear, zFar)
-
 	faceColor = color.RGBA{200, 200, 200, 255}
 
 	// Calculate the light vector
 	lightVector := Vec3{X: -0.5, Y: 0.5, Z: -1}.Normalize()
 
-	// Reuse the existing slice if possible
-	if cap(r.triangles) < len(mesh.Faces) {
-		r.triangles = make([]Triangle, 0, len(mesh.Faces))
-	} else {
-		r.triangles = r.triangles[:0]
-	}
-
-	for _, face := range mesh.Faces {
+	for i, face := range mesh.Faces {
 		v1 := worldMatrix.MultiplyVec4(mesh.Vertices[face.A].ToVec4())
 		v2 := worldMatrix.MultiplyVec4(mesh.Vertices[face.B].ToVec4())
 		v3 := worldMatrix.MultiplyVec4(mesh.Vertices[face.C].ToVec4())
@@ -126,11 +129,12 @@ func (r *Renderer) project(mesh *Mesh, camera *Camera) {
 
 		// Add the triangle to the list of triangles to be rendered
 		r.triangles = append(r.triangles, Triangle{
-			A:     Vec2{X: s0.X, Y: s0.Y},
-			B:     Vec2{X: s1.X, Y: s1.Y},
-			C:     Vec2{X: s2.X, Y: s2.Y},
-			Z:     (s0.Z + s1.Z + s2.Z) / 3.0,
-			Color: faceColor,
+			A:         Vec2{X: s0.X, Y: s0.Y},
+			B:         Vec2{X: s1.X, Y: s1.Y},
+			C:         Vec2{X: s2.X, Y: s2.Y},
+			Z:         (s0.Z + s1.Z + s2.Z) / 3.0,
+			Color:     faceColor,
+			FaceIndex: i,
 		})
 	}
 }
@@ -169,6 +173,14 @@ func (r *Renderer) rasterize() {
 			if r.ShowFaces {
 				center := Vec2{X: (a.X + b.X + c.X) / 3, Y: (a.Y + b.Y + c.Y) / 3}
 				r.fb.Rect(int(center.X)-1, int(center.Y)-1, 3, 3, ec, t.Z)
+
+				if r.Debug {
+					r.DebugInfo = append(r.DebugInfo, DebugInfo{
+						X:    int(center.X),
+						Y:    int(center.Y) - 5,
+						Text: fmt.Sprintf("%d", t.FaceIndex),
+					})
+				}
 			}
 		}
 

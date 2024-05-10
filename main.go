@@ -46,7 +46,14 @@ func loadMeshFromFile(filename string) (*Mesh, error) {
 		_ = file.Close()
 	}()
 
-	return ReadObj(file)
+	mesh, err := ReadObj(file)
+	if err != nil {
+		return nil, err
+	}
+
+	mesh.Name = path.Base(filename)
+
+	return mesh, nil
 }
 
 type options struct {
@@ -64,10 +71,6 @@ func parseOptions() *options {
 
 func main() {
 	opts := parseOptions()
-
-	if flag.NArg() != 1 {
-		log.Fatalf("usage: %s <filename>", os.Args[0])
-	}
 
 	if opts.cpuProfile != "" {
 		f, err := os.Create(opts.cpuProfile)
@@ -103,17 +106,23 @@ func main() {
 		}()
 	}
 
-	filename := flag.Arg(0)
 	fb := NewFrameBuffer(viewWidth, viewHeight)
 	camera := Camera{Position: Vec3{0, 0, 0}, FOVAngle: 45}
 	renderer := NewRenderer(fb)
 
-	mesh, err := loadMeshFromFile(filename)
-	if err != nil {
-		log.Fatalf("failed to load mesh: %s", err)
+	var (
+		mesh = NewCube()
+		err  error
+	)
+
+	if flag.NArg() >= 1 {
+		mesh, err = loadMeshFromFile(flag.Arg(0))
+		if err != nil {
+			log.Fatalf("failed to load mesh: %s", err)
+		}
 	}
 
-	mesh.Translation.Z = 3    // Move away from the camera
+	mesh.Translation.Z = 5    // Move away from the camera
 	mesh.Rotation.Y = math.Pi // Rotate 180 degrees
 
 	var (
@@ -147,6 +156,8 @@ func main() {
 			renderer.ShowVertices = !renderer.ShowVertices
 		case rl.IsKeyPressed(rl.KeyL):
 			renderer.Lighting = !renderer.Lighting
+		case rl.IsKeyPressed(rl.KeyD):
+			renderer.Debug = !renderer.Debug
 		}
 
 		cursorX := rl.GetMouseX()
@@ -195,7 +206,7 @@ func main() {
 		)
 
 		drawText(5, 5, fmt.Sprintf("%d fps", rl.GetFPS()))
-		drawText(5, 15, path.Base(filename))
+		drawText(5, 15, path.Base(mesh.Name))
 		drawText(5, 25, fmt.Sprintf("vertices: %d", len(mesh.Vertices)))
 		drawText(5, 35, fmt.Sprintf("faces: %d", len(mesh.Faces)))
 
@@ -206,6 +217,10 @@ func main() {
 			onOff(renderer.Lighting),
 			onOff(renderer.BackfaceCulling),
 		))
+
+		for _, info := range renderer.DebugInfo {
+			rl.DrawText(info.Text, int32(info.X), int32(info.Y), 15, rl.Red)
+		}
 
 		rl.EndDrawing()
 	}

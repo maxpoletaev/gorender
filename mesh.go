@@ -3,16 +3,25 @@ package main
 import "image/color"
 
 type Triangle struct {
-	A, B, C Vec2
-	Z       float64
-	Color   color.RGBA
+	FaceIndex int
+	A, B, C   Vec2
+	Z         float64
+	Color     color.RGBA
+}
+
+type UV struct {
+	U, V float64
 }
 
 type Face struct {
-	A, B, C int
+	A, B, C    int // Pointers to the vertices in the mesh.
+	TxtCoordsA UV
+	TxtCoordsB UV
+	TxtCoordsC UV
 }
 
 type Mesh struct {
+	Name        string
 	Vertices    []Vec3
 	Faces       []Face
 	Rotation    Vec3
