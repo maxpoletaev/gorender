@@ -1,8 +1,11 @@
 package main
 
+import "image/color"
+
 type Triangle struct {
 	A, B, C Vec2
 	Z       float64
+	Color   color.RGBA
 }
 
 type Face struct {

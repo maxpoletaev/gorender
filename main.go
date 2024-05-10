@@ -12,10 +12,9 @@ import (
 )
 
 const (
-	viewScale   = 2
-	viewWidth   = 400
-	viewHeight  = 280
-	fovFactor   = 800.0
+	viewScale   = 1
+	viewWidth   = 1280
+	viewHeight  = 720
 	windowTitle = "goxgl"
 )
 
@@ -145,6 +144,8 @@ func main() {
 			renderer.ShowFaces = !renderer.ShowFaces
 		case rl.IsKeyPressed(rl.KeyV):
 			renderer.ShowVertices = !renderer.ShowVertices
+		case rl.IsKeyPressed(rl.KeyL):
+			renderer.Lighting = !renderer.Lighting
 		}
 
 		cursorX := rl.GetMouseX()
@@ -197,8 +198,13 @@ func main() {
 		drawText(5, 25, fmt.Sprintf("vertices: %d", len(mesh.Vertices)))
 		drawText(5, 35, fmt.Sprintf("faces: %d", len(mesh.Faces)))
 
-		drawText(5, windowHeight-15, fmt.Sprintf("[V]erticies: %s [E]dges: %s [F]aces: %s, [B]ackface culling: %s",
-			onOff(renderer.ShowVertices), onOff(renderer.ShowEdges), onOff(renderer.ShowFaces), onOff(renderer.BackfaceCulling)))
+		drawText(5, windowHeight-15, fmt.Sprintf("[V]erticies: %s [E]dges: %s [F]aces: %s, [L]Lights: %s, [B]ackface culling: %s",
+			onOff(renderer.ShowVertices),
+			onOff(renderer.ShowEdges),
+			onOff(renderer.ShowFaces),
+			onOff(renderer.Lighting),
+			onOff(renderer.BackfaceCulling),
+		))
 
 		rl.EndDrawing()
 	}
