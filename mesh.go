@@ -37,12 +37,3 @@ func (m *Mesh) Transform(matrices ...Matrix) {
 		m.Vertices[j] = mat.MultiplyVec4(v.ToVec4()).ToVec3()
 	}
 }
-
-// FaceNormal returns the normal vector of a face with the given index.
-func (m *Mesh) FaceNormal(idx int) Vec3 {
-	a := m.Vertices[m.Faces[idx].A]
-	b := m.Vertices[m.Faces[idx].B]
-	c := m.Vertices[m.Faces[idx].C]
-
-	return b.Sub(a).CrossProduct(c.Sub(a))
-}

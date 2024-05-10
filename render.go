@@ -106,24 +106,30 @@ func (r *Renderer) project(mesh *Mesh, camera *Camera) {
 			faceColor = colorIntensity(faceColor, max(0.05, min(lightIntensity, 1.0)))
 		}
 
+		//if r.BackfaceCulling {
+		//	cameraRay := camera.Position.Sub(a3)
+		//	if faceNormal.DotProduct(cameraRay) < 0 {
+		//		continue
+		//	}
+		//}
+
+		// Project the vertices to the screen coordinates
+		s0 := projectPoint(v1, &perspective, center).ToVec3()
+		s1 := projectPoint(v2, &perspective, center).ToVec3()
+		s2 := projectPoint(v3, &perspective, center).ToVec3()
+
 		if r.BackfaceCulling {
-			cameraRay := camera.Position.Sub(a3)
-			if faceNormal.DotProduct(cameraRay) < 0 {
+			if (s1.X-s0.X)*(s2.Y-s0.Y)-(s2.X-s0.X)*(s1.Y-s0.Y) < 0 {
 				continue
 			}
 		}
 
-		// Project the vertices to the screen coordinates
-		pa := projectPoint(v1, &perspective, center)
-		pb := projectPoint(v2, &perspective, center)
-		pc := projectPoint(v3, &perspective, center)
-
 		// Add the triangle to the list of triangles to be rendered
 		r.triangles = append(r.triangles, Triangle{
-			A:     Vec2{X: pa.X, Y: pa.Y},
-			B:     Vec2{X: pb.X, Y: pb.Y},
-			C:     Vec2{X: pc.X, Y: pc.Y},
-			Z:     (pa.Z + pb.Z + pc.Z) / 3.0,
+			A:     Vec2{X: s0.X, Y: s0.Y},
+			B:     Vec2{X: s1.X, Y: s1.Y},
+			C:     Vec2{X: s2.X, Y: s2.Y},
+			Z:     (s0.Z + s1.Z + s2.Z) / 3.0,
 			Color: faceColor,
 		})
 	}
@@ -159,6 +165,11 @@ func (r *Renderer) rasterize() {
 			r.fb.Line(int(a.X), int(a.Y), int(b.X), int(b.Y), ec, t.Z)
 			r.fb.Line(int(b.X), int(b.Y), int(c.X), int(c.Y), ec, t.Z)
 			r.fb.Line(int(c.X), int(c.Y), int(a.X), int(a.Y), ec, t.Z)
+
+			if r.ShowFaces {
+				center := Vec2{X: (a.X + b.X + c.X) / 3, Y: (a.Y + b.Y + c.Y) / 3}
+				r.fb.Rect(int(center.X)-1, int(center.Y)-1, 3, 3, ec, t.Z)
+			}
 		}
 
 		if r.ShowVertices {
