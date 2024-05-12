@@ -1,6 +1,8 @@
 package main
 
-import "math"
+import (
+	"math"
+)
 
 // Vec2 represents a 2D vector.
 type Vec2 struct {

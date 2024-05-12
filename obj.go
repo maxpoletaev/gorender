@@ -49,23 +49,23 @@ func parseFace(c *ObjContext, line string) (Face, error) {
 	case strings.Contains(line, "/") && strings.Count(line, "/") == 3:
 		_, err = fmt.Sscanf(
 			line, "f %d/%d %d/%d %d/%d",
-			&face.A, &face.TxtCoordsA,
-			&face.B, &face.TxtCoordsB,
-			&face.C, &face.TxtCoordsC,
+			&face.A, &face.UVa,
+			&face.B, &face.UVc,
+			&face.C, &face.UVb,
 		)
 
 	case strings.Contains(line, "/") && strings.Count(line, "/") == 6:
-		var vt0, vt1, vt2 int
+		var vtA, vtB, vtC int
 		_, err = fmt.Sscanf(
 			line, "f %d/%d/%d %d/%d/%d %d/%d/%d",
-			&face.A, &vt0, &discard,
-			&face.B, &vt1, &discard,
-			&face.C, &vt2, &discard,
+			&face.A, &vtA, &discard,
+			&face.B, &vtB, &discard,
+			&face.C, &vtC, &discard,
 		)
 
-		face.TxtCoordsA = c.TextureVertices[vt0-1]
-		face.TxtCoordsB = c.TextureVertices[vt1-1]
-		face.TxtCoordsC = c.TextureVertices[vt2-1]
+		face.UVa = c.TextureVertices[vtA-1]
+		face.UVb = c.TextureVertices[vtB-1]
+		face.UVc = c.TextureVertices[vtC-1]
 
 	default:
 		_, err = fmt.Sscanf(

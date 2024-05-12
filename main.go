@@ -3,6 +3,9 @@ package main
 import (
 	"flag"
 	"fmt"
+	"image"
+	"image/color"
+	_ "image/png"
 	"log"
 	"math"
 	"os"
@@ -13,9 +16,9 @@ import (
 )
 
 const (
-	viewScale   = 1
-	viewWidth   = 1280
-	viewHeight  = 720
+	viewScale   = 2
+	viewWidth   = 800 / viewScale
+	viewHeight  = 600 / viewScale
 	windowTitle = "goxgl"
 )
 
@@ -36,7 +39,7 @@ func onOff(b bool) string {
 	return "OFF"
 }
 
-func loadMeshFromFile(filename string) (*Mesh, error) {
+func loadMeshFile(filename string) (*Mesh, error) {
 	file, err := os.Open(filename)
 	if err != nil {
 		return nil, err
@@ -56,21 +59,55 @@ func loadMeshFromFile(filename string) (*Mesh, error) {
 	return mesh, nil
 }
 
+func loadTextureFile(filename string) (*ImageTexture, error) {
+	file, err := os.Open(filename)
+	if err != nil {
+		return nil, err
+	}
+
+	img, _, err := image.Decode(file)
+	if err != nil {
+		return nil, err
+	}
+
+	bounds := img.Bounds()
+	texture := &ImageTexture{
+		Width:  bounds.Dx(),
+		Height: bounds.Dy(),
+		Pixels: make([]color.RGBA, bounds.Dx()*bounds.Dy()),
+	}
+
+	for y := 0; y < texture.Height; y++ {
+		for x := 0; x < texture.Width; x++ {
+			c := color.RGBAModel.Convert(img.At(x, y)).(color.RGBA)
+			texture.Pixels[y*texture.Width+x] = c
+		}
+	}
+
+	return texture, nil
+}
+
 type options struct {
 	cpuProfile string
 	memProfile string
+	texture    string
 }
 
 func parseOptions() *options {
 	opts := &options{}
 	flag.StringVar(&opts.cpuProfile, "cpuprof", "", "write cpu profile to file")
 	flag.StringVar(&opts.memProfile, "memprof", "", "write memory profile to file")
+	flag.StringVar(&opts.texture, "texture", "", "texture file")
 	flag.Parse()
 	return opts
 }
 
 func main() {
 	opts := parseOptions()
+
+	if flag.NArg() == 0 {
+		log.Fatalf("usage: %s [options] filename.obj", os.Args[0])
+	}
 
 	if opts.cpuProfile != "" {
 		f, err := os.Create(opts.cpuProfile)
@@ -107,19 +144,21 @@ func main() {
 	}
 
 	fb := NewFrameBuffer(viewWidth, viewHeight)
-	camera := Camera{Position: Vec3{0, 0, 0}, FOVAngle: 45}
+	camera := Camera{Position: Vec3{0, 0, -1}, FOVAngle: 45}
 	renderer := NewRenderer(fb)
 
-	var (
-		mesh = NewCube()
-		err  error
-	)
+	mesh, err := loadMeshFile(flag.Arg(0))
+	if err != nil {
+		log.Fatalf("failed to load mesh: %s", err)
+	}
 
-	if flag.NArg() >= 1 {
-		mesh, err = loadMeshFromFile(flag.Arg(0))
+	if opts.texture != "" {
+		texture, err := loadTextureFile(opts.texture)
 		if err != nil {
-			log.Fatalf("failed to load mesh: %s", err)
+			log.Fatalf("failed to load texture: %s", err)
 		}
+
+		mesh.Texture = texture
 	}
 
 	mesh.Translation.Z = 5    // Move away from the camera
@@ -134,8 +173,8 @@ func main() {
 	defer rl.CloseWindow()
 	rl.SetTargetFPS(30)
 
-	texture := rl.LoadRenderTexture(int32(fb.Width), int32(fb.Height))
-	defer rl.UnloadRenderTexture(texture)
+	renderTexture := rl.LoadRenderTexture(int32(fb.Width), int32(fb.Height))
+	defer rl.UnloadRenderTexture(renderTexture)
 
 	var (
 		lastCursorX = rl.GetMouseX()
@@ -157,7 +196,7 @@ func main() {
 		case rl.IsKeyPressed(rl.KeyL):
 			renderer.Lighting = !renderer.Lighting
 		case rl.IsKeyPressed(rl.KeyD):
-			renderer.Debug = !renderer.Debug
+			renderer.DebugEnabled = !renderer.DebugEnabled
 		}
 
 		cursorX := rl.GetMouseX()
@@ -190,14 +229,14 @@ func main() {
 		}
 
 		// Copy the frame buffer to the render texture
-		rl.BeginTextureMode(texture)
-		rl.UpdateTexture(texture.Texture, fb.Pixels)
+		rl.BeginTextureMode(renderTexture)
+		rl.UpdateTexture(renderTexture.Texture, fb.Pixels)
 		rl.EndTextureMode()
 
 		// Draw the render texture to the screen
 		rl.BeginDrawing()
 		rl.DrawTexturePro(
-			texture.Texture,
+			renderTexture.Texture,
 			rl.Rectangle{0, 0, float32(fb.Width), float32(fb.Height)},
 			rl.Rectangle{0, 0, float32(fb.Width * viewScale), float32(fb.Height * viewScale)},
 			rl.Vector2{0, 0},
@@ -210,7 +249,7 @@ func main() {
 		drawText(5, 25, fmt.Sprintf("vertices: %d", len(mesh.Vertices)))
 		drawText(5, 35, fmt.Sprintf("faces: %d", len(mesh.Faces)))
 
-		drawText(5, windowHeight-15, fmt.Sprintf("[V]erticies: %s [E]dges: %s [F]aces: %s, [L]Lights: %s, [B]ackface culling: %s",
+		drawText(5, windowHeight-15, fmt.Sprintf("[V]erticies: %s [E]dges: %s [F]aces: %s, [L]ights: %s, [B]ackface culling: %s",
 			onOff(renderer.ShowVertices),
 			onOff(renderer.ShowEdges),
 			onOff(renderer.ShowFaces),
@@ -219,7 +258,8 @@ func main() {
 		))
 
 		for _, info := range renderer.DebugInfo {
-			rl.DrawText(info.Text, int32(info.X), int32(info.Y), 15, rl.Red)
+			rl.DrawText(info.Text, int32(info.X*viewScale)+1, int32(info.Y*viewScale)+1, 12, rl.Black)
+			rl.DrawText(info.Text, int32(info.X*viewScale), int32(info.Y*viewScale), 12, rl.Yellow)
 		}
 
 		rl.EndDrawing()
