@@ -28,9 +28,10 @@ $ ./goxgl models/suzanne.obj
  * [x] OBJ file loading
  * [x] Backface culling
  * [x] Transformations
- * [ ] Texture mapping
- * [ ] Shading
- * [ ] Z-buffering
+ * [x] Texture mapping
+ * [x] Flat shading
+ * [ ] Gouraud shading
+ * [x] Z-buffering
  * [ ] View frustum clipping
 
 ## Resources

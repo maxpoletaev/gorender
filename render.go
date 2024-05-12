@@ -1,10 +1,8 @@
 package main
 
 import (
-	"fmt"
 	"image/color"
 	"math"
-	"sort"
 )
 
 var (
@@ -66,22 +64,10 @@ func projectPoint(v Vec4, perspective *Matrix, center Vec2) Vec4 {
 
 	// Scale and translate to screen center.
 	// The Y axis is inverted because in screen coordinates the origin is in the top-left corner.
-	v.X = v.X*center.X + center.X
+	v.X = v.X*center.X*-1 + center.X
 	v.Y = v.Y*center.Y*-1 + center.Y
 
 	return v
-}
-
-func (r *Renderer) debug(x, y int, text string) {
-	if !r.DebugEnabled {
-		return
-	}
-
-	r.DebugInfo = append(r.DebugInfo, DebugInfo{
-		X:    x,
-		Y:    y,
-		Text: text,
-	})
 }
 
 func (r *Renderer) project(mesh *Mesh, camera *Camera) {
@@ -134,7 +120,7 @@ func (r *Renderer) project(mesh *Mesh, camera *Camera) {
 		s2 := projectPoint(v3, &perspective, center)
 
 		//if r.BackfaceCulling {
-		//	if (s1.X-s0.X)*(s2.Y-s0.Y)-(s2.X-s0.X)*(s1.Y-s0.Y) < 0 {
+		//	if (s1.X-s0.X)*(s2.Y-s0.Y)-(s2.X-s0.X)*(s1.Y-s0.Y) > 0 {
 		//		continue
 		//	}
 		//}
@@ -160,11 +146,6 @@ func (r *Renderer) project(mesh *Mesh, camera *Camera) {
 }
 
 func (r *Renderer) rasterize() {
-	// Sort triangles by Z coordinate (painter's algorithm)
-	sort.Slice(r.triangles, func(i, j int) bool {
-		return r.triangles[i].Z < r.triangles[j].Z
-	})
-
 	// Draw triangles to the frame buffer
 	for _, t := range r.triangles {
 		a, b, c := t.A, t.B, t.C
@@ -206,9 +187,6 @@ func (r *Renderer) rasterize() {
 			r.fb.Rect(int(b.X)-1, int(b.Y)-1, 3, 3, vertexColor)
 			r.fb.Rect(int(c.X)-1, int(c.Y)-1, 3, 3, vertexColor)
 		}
-
-		r.debug(int(center.X), int(center.Y), fmt.Sprintf("Face %d", t.FaceIndex))
-		r.debug(int(center.X), int(center.Y+15), fmt.Sprintf("Vertices: %d, %d, %d", t.VertexIndexA, t.VertexIndexB, t.VertexIndexC))
 	}
 }
 

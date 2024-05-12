@@ -5,26 +5,50 @@ import (
 )
 
 type FrameBuffer struct {
-	Width  int
-	Height int
-	Pixels []color.RGBA
+	Width   int
+	Height  int
+	ZBuffer []float64
+	Pixels  []color.RGBA
 }
 
 func NewFrameBuffer(width, height int) *FrameBuffer {
 	return &FrameBuffer{
-		Width:  width,
-		Height: height,
-		Pixels: make([]color.RGBA, width*height),
+		Width:   width,
+		Height:  height,
+		Pixels:  make([]color.RGBA, width*height),
+		ZBuffer: make([]float64, width*height),
 	}
 }
 
-func (fb *FrameBuffer) Pixel(x, y int, c color.RGBA) {
+func (fb *FrameBuffer) Pixel(x, y int, c color.RGBA, z float64) {
 	idx := y*fb.Width + x
+
 	if idx < 0 || idx >= len(fb.Pixels) {
 		return
 	}
 
-	fb.Pixels[idx] = c
+	if z <= fb.ZBuffer[idx] {
+		fb.Pixels[idx] = c
+		fb.ZBuffer[idx] = z
+	}
+}
+
+func (fb *FrameBuffer) Clear(c color.RGBA) {
+	fb.ZBuffer[0] = 1.0
+	fb.Pixels[0] = c
+
+	for i := 1; i < len(fb.Pixels); i *= 2 {
+		copy(fb.Pixels[i:], fb.Pixels[:i])
+		copy(fb.ZBuffer[i:], fb.ZBuffer[:i])
+	}
+}
+
+func (fb *FrameBuffer) DotGrid(c color.RGBA, step int) {
+	for y := step; y < fb.Height; y += step {
+		for x := step; x < fb.Width; x += step {
+			fb.Pixel(x, y, c, 1.0)
+		}
+	}
 }
 
 func (fb *FrameBuffer) Rect(x, y, width, height int, c color.RGBA) {
@@ -33,24 +57,8 @@ func (fb *FrameBuffer) Rect(x, y, width, height int, c color.RGBA) {
 	}
 	for py := y; py < y+height; py++ {
 		for px := x; px < x+width; px++ {
-			fb.Pixel(px, py, c)
+			fb.Pixel(px, py, c, -1)
 		}
-	}
-}
-
-func (fb *FrameBuffer) DotGrid(c color.RGBA, step int) {
-	for y := step; y < fb.Height; y += step {
-		for x := step; x < fb.Width; x += step {
-			fb.Pixel(x, y, c)
-		}
-	}
-}
-
-func (fb *FrameBuffer) Clear(c color.RGBA) {
-	fb.Pixels[0] = c
-
-	for i := 1; i < len(fb.Pixels); i *= 2 {
-		copy(fb.Pixels[i:], fb.Pixels[:i])
 	}
 }
 
@@ -64,7 +72,7 @@ func (fb *FrameBuffer) Line(x0, y0 int, x1, y1 int, c color.RGBA) {
 	curX, curY := float64(x0), float64(y0)
 
 	for i := 0; i <= sideLength; i++ {
-		fb.Pixel(int(curX), int(curY), c)
+		fb.Pixel(int(curX), int(curY), c, -1)
 		curX += xStep
 		curY += yStep
 	}
@@ -119,7 +127,7 @@ func (fb *FrameBuffer) Triangle(
 			v := ((alpha/w0)*v0 + (beta/w1)*v1 + (gamma/w2)*v2) / wrec
 
 			c := texture.Sample(u, -v)
-			fb.Pixel(x, y, colorIntensity(c, intensity))
+			fb.Pixel(x, y, colorIntensity(c, intensity), -wrec)
 		}
 	}
 }

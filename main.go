@@ -27,11 +27,6 @@ type Camera struct {
 	FOVAngle float64
 }
 
-func drawText(x, y int32, text string) {
-	rl.DrawText(text, x+1, y+1, 10, rl.Black)
-	rl.DrawText(text, x, y, 10, rl.White)
-}
-
 func onOff(b bool) string {
 	if b {
 		return "ON"
@@ -102,6 +97,11 @@ func parseOptions() *options {
 	return opts
 }
 
+func drawText(x, y int32, text string) {
+	rl.DrawText(text, x+1, y+1, 10, rl.Black)
+	rl.DrawText(text, x, y, 10, rl.White)
+}
+
 func main() {
 	opts := parseOptions()
 
@@ -144,7 +144,7 @@ func main() {
 	}
 
 	fb := NewFrameBuffer(viewWidth, viewHeight)
-	camera := Camera{Position: Vec3{-0.5, 0, -1}, FOVAngle: 45}
+	camera := Camera{Position: Vec3{0, 0, -1}, FOVAngle: 45}
 	renderer := NewRenderer(fb)
 
 	mesh, err := loadMeshFile(flag.Arg(0))
@@ -210,11 +210,11 @@ func main() {
 
 			if deltaX != 0 || deltaY != 0 {
 				if rl.IsKeyDown(rl.KeyLeftShift) || rl.IsKeyDown(rl.KeyRightShift) {
-					mesh.Translation.X += float64(deltaX) * 0.005
+					mesh.Translation.X -= float64(deltaX) * 0.005
 					mesh.Translation.Y -= float64(deltaY) * 0.005
 				} else {
 					mesh.Rotation.X -= float64(deltaY) * 0.01
-					mesh.Rotation.Y -= float64(deltaX) * 0.01
+					mesh.Rotation.Y += float64(deltaX) * 0.01
 				}
 			}
 		}

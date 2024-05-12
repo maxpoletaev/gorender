@@ -14,8 +14,8 @@ type ImageTexture struct {
 }
 
 func (t *ImageTexture) Sample(u, v float64) color.RGBA {
-	x := (int(u*float64(t.Width)) + t.Width) % t.Width
-	y := (int(v*float64(t.Height)) + t.Height) % t.Height
+	x := abs(int(u*float64(t.Width))+t.Width) % t.Width
+	y := abs(int(v*float64(t.Height))+t.Height) % t.Height
 	return t.Pixels[y*t.Width+x]
 }
 
