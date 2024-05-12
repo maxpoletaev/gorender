@@ -144,7 +144,7 @@ func main() {
 	}
 
 	fb := NewFrameBuffer(viewWidth, viewHeight)
-	camera := Camera{Position: Vec3{0, 0, -1}, FOVAngle: 45}
+	camera := Camera{Position: Vec3{-0.5, 0, -1}, FOVAngle: 45}
 	renderer := NewRenderer(fb)
 
 	mesh, err := loadMeshFile(flag.Arg(0))
@@ -169,8 +169,10 @@ func main() {
 		windowHeight = int32(fb.Height * viewScale)
 	)
 
+	rl.SetTraceLogLevel(rl.LogError) // Make raylib less verbose
 	rl.InitWindow(windowWidth, windowHeight, windowTitle)
 	defer rl.CloseWindow()
+
 	rl.SetTargetFPS(30)
 
 	renderTexture := rl.LoadRenderTexture(int32(fb.Width), int32(fb.Height))

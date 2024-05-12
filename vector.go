@@ -29,7 +29,7 @@ func (v Vec2) DotProduct(other Vec2) float64 {
 	return v.X*other.X + v.Y*other.Y
 }
 
-func (v Vec2) Norm() Vec2 {
+func (v Vec2) Normalize() Vec2 {
 	return v.Divide(v.Length())
 }
 
@@ -52,43 +52,6 @@ func (v Vec3) Divide(scalar float64) Vec3 {
 
 func (v Vec3) Length() float64 {
 	return math.Sqrt(v.X*v.X + v.Y*v.Y + v.Z*v.Z)
-}
-
-func (v Vec3) RotateX(x float64) Vec3 {
-	if x == 0 {
-		return v
-	}
-	return Vec3{
-		X: v.X,
-		Y: v.Y*math.Cos(x) - v.Z*math.Sin(x),
-		Z: v.Y*math.Sin(x) + v.Z*math.Cos(x),
-	}
-}
-
-func (v Vec3) RotateY(y float64) Vec3 {
-	if y == 0 {
-		return v
-	}
-	return Vec3{
-		X: v.X*math.Cos(y) + v.Z*math.Sin(y),
-		Y: v.Y,
-		Z: -v.X*math.Sin(y) + v.Z*math.Cos(y),
-	}
-}
-
-func (v Vec3) RotateZ(z float64) Vec3 {
-	if z == 0 {
-		return v
-	}
-	return Vec3{
-		X: v.X*math.Cos(z) - v.Y*math.Sin(z),
-		Y: v.X*math.Sin(z) + v.Y*math.Cos(z),
-		Z: v.Z,
-	}
-}
-
-func (v Vec3) Rotate(x, y, z float64) Vec3 {
-	return v.RotateX(x).RotateY(y).RotateZ(z)
 }
 
 func (v Vec3) CrossProduct(other Vec3) Vec3 {

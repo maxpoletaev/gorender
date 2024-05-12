@@ -1,12 +1,17 @@
 package main
 
-type integer interface {
-	~int | ~int8 | ~int16 | ~int32 | ~int64 | ~uint8 | ~uint16 | ~uint32 | ~uint64
+type signed interface {
+	~int | ~int8 | ~int16 | ~int32 | ~int64 | ~float32 | ~float64
 }
 
-func abs[T integer](v T) T {
+func abs[T signed](v T) T {
 	if v < 0 {
-		return -v
+		v = -v
 	}
+
+	if v < 0 {
+		v -= 1 // minInt -> maxInt
+	}
+
 	return v
 }

@@ -14,7 +14,7 @@ var (
 
 // Triangle is a 2D projection of a Face.
 type Triangle struct {
-	A, B, C       Vec2
+	A, B, C       Vec4
 	UVa, UVb, UVc UV
 	Texture       Texture
 	Intensity     float64
@@ -70,15 +70,6 @@ func projectPoint(v Vec4, perspective *Matrix, center Vec2) Vec4 {
 	v.Y = v.Y*center.Y*-1 + center.Y
 
 	return v
-}
-
-func colorIntensity(c color.RGBA, intensity float64) color.RGBA {
-	return color.RGBA{
-		R: min(uint8(float64(c.R)*intensity), 255),
-		G: min(uint8(float64(c.G)*intensity), 255),
-		B: min(uint8(float64(c.B)*intensity), 255),
-		A: c.A,
-	}
 }
 
 func (r *Renderer) debug(x, y int, text string) {
@@ -138,9 +129,9 @@ func (r *Renderer) project(mesh *Mesh, camera *Camera) {
 		}
 
 		// Project the vertices to the screen coordinates
-		s0 := projectPoint(v1, &perspective, center).ToVec3()
-		s1 := projectPoint(v2, &perspective, center).ToVec3()
-		s2 := projectPoint(v3, &perspective, center).ToVec3()
+		s0 := projectPoint(v1, &perspective, center)
+		s1 := projectPoint(v2, &perspective, center)
+		s2 := projectPoint(v3, &perspective, center)
 
 		//if r.BackfaceCulling {
 		//	if (s1.X-s0.X)*(s2.Y-s0.Y)-(s2.X-s0.X)*(s1.Y-s0.Y) < 0 {
@@ -150,9 +141,9 @@ func (r *Renderer) project(mesh *Mesh, camera *Camera) {
 
 		// Add the triangle to the list of triangles to be rendered
 		r.triangles = append(r.triangles, Triangle{
-			A:         Vec2{X: s0.X, Y: s0.Y},
-			B:         Vec2{X: s1.X, Y: s1.Y},
-			C:         Vec2{X: s2.X, Y: s2.Y},
+			A:         s0,
+			B:         s1,
+			C:         s2,
 			Intensity: lightIntensity,
 			Texture:   mesh.Texture,
 			UVa:       face.UVa,
@@ -185,10 +176,10 @@ func (r *Renderer) rasterize() {
 		}
 
 		if r.ShowFaces {
-			r.fb.TexturedTriangle(
-				int(a.X), int(a.Y), uvA.U, uvA.V,
-				int(b.X), int(b.Y), uvB.U, uvB.V,
-				int(c.X), int(c.Y), uvC.U, uvC.V,
+			r.fb.Triangle(
+				int(a.X), int(a.Y), a.W, uvA.U, uvA.V,
+				int(b.X), int(b.Y), b.W, uvB.U, uvB.V,
+				int(c.X), int(c.Y), c.W, uvC.U, uvC.V,
 				t.Texture,
 				t.Intensity,
 			)

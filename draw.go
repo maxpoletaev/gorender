@@ -70,6 +70,15 @@ func (fb *FrameBuffer) Line(x0, y0 int, x1, y1 int, c color.RGBA) {
 	}
 }
 
+func colorIntensity(c color.RGBA, intensity float64) color.RGBA {
+	return color.RGBA{
+		R: min(uint8(float64(c.R)*intensity), 255),
+		G: min(uint8(float64(c.G)*intensity), 255),
+		B: min(uint8(float64(c.B)*intensity), 255),
+		A: c.A,
+	}
+}
+
 func barycentric(area float64, x0, y0, x1, y1, x2, y2, px, py int) (float64, float64, float64) {
 	w0 := float64((y1-y2)*(px-x2)+(x2-x1)*(py-y2)) / area
 	w1 := float64((y2-y0)*(px-x2)+(x0-x2)*(py-y2)) / area
@@ -77,10 +86,10 @@ func barycentric(area float64, x0, y0, x1, y1, x2, y2, px, py int) (float64, flo
 	return w0, w1, w2
 }
 
-func (fb *FrameBuffer) TexturedTriangle(
-	x0, y0 int, u0, v0 float64,
-	x1, y1 int, u1, v1 float64,
-	x2, y2 int, u2, v2 float64,
+func (fb *FrameBuffer) Triangle(
+	x0, y0 int, w0 float64, u0, v0 float64,
+	x1, y1 int, w1 float64, u1, v1 float64,
+	x2, y2 int, w2 float64, u2, v2 float64,
 	texture Texture,
 	intensity float64,
 ) {
@@ -89,7 +98,7 @@ func (fb *FrameBuffer) TexturedTriangle(
 	minY, maxY := min(y0, y1, y2), max(y0, y1, y2)
 
 	// Ensure the intensity is in the range [0, 1]
-	intensity = max(0.1, min(intensity, 0.95))
+	intensity = max(0.1, min(intensity, 1.0))
 
 	// Find the area of the triangle
 	area := float64((y1-y2)*(x0-x2) + (x2-x1)*(y0-y2))
@@ -99,16 +108,17 @@ func (fb *FrameBuffer) TexturedTriangle(
 	// outside the triangle).
 	for y := minY; y <= maxY; y++ {
 		for x := minX; x <= maxX; x++ {
-			w0, w1, w2 := barycentric(area, x0, y0, x1, y1, x2, y2, x, y)
-			if w0 < 0 || w1 < 0 || w2 < 0 {
+			alpha, beta, gamma := barycentric(area, x0, y0, x1, y1, x2, y2, x, y)
+			if alpha < 0 || beta < 0 || gamma < 0 || alpha > 1 || beta > 1 || gamma > 1 {
 				continue
 			}
 
 			// Interpolate the texture coordinates
-			u := w0*u0 + w1*u1 + w2*u2
-			v := w0*v0 + w1*v1 + w2*v2
+			wrec := (1/w0)*alpha + (1/w1)*beta + (1/w2)*gamma
+			u := ((alpha/w0)*u0 + (beta/w1)*u1 + (gamma/w2)*u2) / wrec
+			v := ((alpha/w0)*v0 + (beta/w1)*v1 + (gamma/w2)*v2) / wrec
 
-			c := texture.Sample(u, v)
+			c := texture.Sample(u, -v)
 			fb.Pixel(x, y, colorIntensity(c, intensity))
 		}
 	}
