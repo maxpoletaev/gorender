@@ -4,7 +4,7 @@ import "math"
 
 type Matrix [4][4]float64
 
-func NewIdentity() Matrix {
+func NewIdentityMatrix() Matrix {
 	return Matrix{
 		{1, 0, 0, 0},
 		{0, 1, 0, 0},
@@ -13,7 +13,7 @@ func NewIdentity() Matrix {
 	}
 }
 
-func NewScale(x, y, z float64) Matrix {
+func NewScaleMatrix(x, y, z float64) Matrix {
 	return Matrix{
 		{x, 0, 0, 0},
 		{0, y, 0, 0},
@@ -22,7 +22,7 @@ func NewScale(x, y, z float64) Matrix {
 	}
 }
 
-func NewTranslation(x, y, z float64) Matrix {
+func NewTranslationMatrix(x, y, z float64) Matrix {
 	return Matrix{
 		{1, 0, 0, x},
 		{0, 1, 0, y},
@@ -31,9 +31,9 @@ func NewTranslation(x, y, z float64) Matrix {
 	}
 }
 
-func NewRotationX(angle float64) Matrix {
+func NewRotationXMatrix(angle float64) Matrix {
 	if angle == 0 {
-		return NewIdentity()
+		return NewIdentityMatrix()
 	}
 
 	sin, cos := math.Sin(angle), math.Cos(angle)
@@ -45,9 +45,9 @@ func NewRotationX(angle float64) Matrix {
 	}
 }
 
-func NewRotationY(angle float64) Matrix {
+func NewRotationYMatrix(angle float64) Matrix {
 	if angle == 0 {
-		return NewIdentity()
+		return NewIdentityMatrix()
 	}
 
 	sin, cos := math.Sin(angle), math.Cos(angle)
@@ -59,9 +59,9 @@ func NewRotationY(angle float64) Matrix {
 	}
 }
 
-func NewRotationZ(angle float64) Matrix {
+func NewRotationZMatrix(angle float64) Matrix {
 	if angle == 0 {
-		return NewIdentity()
+		return NewIdentityMatrix()
 	}
 
 	sin, cos := math.Sin(angle), math.Cos(angle)
@@ -73,17 +73,76 @@ func NewRotationZ(angle float64) Matrix {
 	}
 }
 
-func NewPerspective(fovRad, aspect, znear, zfar float64) Matrix {
-	f := 1.0 / math.Tan(fovRad/2.0)
-	m := NewIdentity()
-
-	m[0][0] = f / aspect
-	m[1][1] = f
-	m[2][2] = zfar / (znear - zfar)
-	m[2][3] = (-zfar * znear) / (zfar - znear)
-	m[3][2] = 1
-
+func NewRotationMatrix(x, y, z float64) Matrix {
+	m := NewIdentityMatrix()
+	m = m.Multiply(NewRotationXMatrix(x))
+	m = m.Multiply(NewRotationYMatrix(y))
+	m = m.Multiply(NewRotationZMatrix(z))
 	return m
+}
+
+func NewWorldMatrix(scale, rotation, translation Vec3) Matrix {
+	m := NewIdentityMatrix()
+	m = NewScaleMatrix(scale.X, scale.Y, scale.Z).Multiply(m)
+	m = NewRotationMatrix(rotation.X, rotation.Y, rotation.Z).Multiply(m)
+	m = NewTranslationMatrix(translation.X, translation.Y, translation.Z).Multiply(m)
+	return m
+}
+
+// NewPerspectiveMatrix returns a perspective projection matrix that transforms
+// world coordinates to clip coordinates.
+func NewPerspectiveMatrix(fov, aspect, zNear, zFar float64) Matrix {
+	tanHalfFov := math.Tan(fov / 2.0)
+
+	m00 := 1 / (aspect * tanHalfFov)
+	m11 := 1 / tanHalfFov
+	m22 := (zFar + zNear) / (zNear - zFar)
+	m23 := (2 * zFar * zNear) / (zNear - zFar)
+
+	return Matrix{
+		{m00, 0, 0, 0},
+		{0, m11, 0, 0},
+		{0, 0, -m22, -m23},
+		{0, 0, -1, 0},
+	}
+}
+
+func NewScreenMatrix(width, height int) Matrix {
+	hw := float64(width) / 2
+	hh := float64(height) / 2
+
+	return Matrix{
+		{hw, 0, 0, hw},
+		{0, hh, 0, hh},
+		{0, 0, 0.5, 0.5},
+		{0, 0, 0, 1},
+	}
+}
+
+func NewLookAtMatrix(eye, target, up Vec3) Matrix {
+	z := target.Sub(eye).Normalize()
+	x := up.CrossProduct(z).Normalize()
+	y := z.CrossProduct(x).Normalize()
+
+	return Matrix{
+		{x.X, x.Y, x.Z, -x.DotProduct(eye)},
+		{y.X, y.Y, y.Z, -y.DotProduct(eye)},
+		{z.X, z.Y, z.Z, -z.DotProduct(eye)},
+		{0, 0, 0, 1},
+	}
+}
+
+func NewViewMatrix(eye, direction, up Vec3) Matrix {
+	z := direction.Normalize()
+	x := up.CrossProduct(z).Normalize()
+	y := z.CrossProduct(x).Normalize()
+
+	return Matrix{
+		{x.X, x.Y, x.Z, -x.DotProduct(eye)},
+		{y.X, y.Y, y.Z, -y.DotProduct(eye)},
+		{z.X, z.Y, z.Z, -z.DotProduct(eye)},
+		{0, 0, 0, 1},
+	}
 }
 
 func (m Matrix) Multiply(other Matrix) (res Matrix) {

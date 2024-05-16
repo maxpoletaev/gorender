@@ -10,18 +10,18 @@ var (
 	edgeColor   = color.RGBA{0, 0, 0, 255}
 )
 
-// Triangle is a 2D projection of a Face.
-type Triangle struct {
-	A, B, C       Vec4
-	UVa, UVb, UVc UV
-	Texture       Texture
-	Intensity     float64
-	Z             float64
+type Camera struct {
+	Position  Vec3
+	Direction Vec3
+	Up        Vec3
+}
 
-	VertexIndexA int
-	VertexIndexB int
-	VertexIndexC int
-	FaceIndex    int
+// Projection is a 2D projection of a Face.
+type Projection struct {
+	Points    [3]Vec4
+	UVs       [3]UV
+	Texture   *Texture
+	Intensity float64
 }
 
 type DebugInfo struct {
@@ -30,130 +30,153 @@ type DebugInfo struct {
 }
 
 type Renderer struct {
-	fb        *FrameBuffer
-	triangles []Triangle
+	fb               *FrameBuffer
+	projections      []Projection
+	frustum          *Frustum
+	aspectX, aspectY float64
+	zNear, zFar      float64
+	fovX, fovY       float64
 
+	FrustumClipping bool
 	ShowVertices    bool
 	ShowEdges       bool
 	ShowFaces       bool
 	BackfaceCulling bool
 	Lighting        bool
+	ShowTextures    bool
 
-	DebugInfo    []DebugInfo
 	DebugEnabled bool
+	DebugInfo    []DebugInfo
 }
 
 func NewRenderer(fb *FrameBuffer) *Renderer {
+	aspectX := float64(fb.Width) / float64(fb.Height)
+	aspectY := float64(fb.Height) / float64(fb.Width)
+
+	fovY := 45 * (math.Pi / 180)
+	fovX := 2 * math.Atan(math.Tan(fovY/2)*aspectX)
+
+	zFar, zNear := 100.0, 0.1
+	frustum := NewFrustum(zNear, zFar)
+
 	return &Renderer{
 		fb:              fb,
 		ShowFaces:       true,
 		BackfaceCulling: true,
 		Lighting:        true,
+		FrustumClipping: true,
+		ShowTextures:    true,
+		fovX:            fovX,
+		fovY:            fovY,
+		aspectX:         aspectX,
+		aspectY:         aspectY,
+		frustum:         frustum,
+		zNear:           zNear,
+		zFar:            zFar,
 	}
-}
-
-func projectPoint(v Vec4, perspective *Matrix, center Vec2) Vec4 {
-	v = perspective.MultiplyVec4(v)
-
-	// Coordinates are normalized in the range [-1, 1]
-	if v.W != 0 {
-		v.X /= v.W
-		v.Y /= v.W
-		v.Z /= v.W
-	}
-
-	// Scale and translate to screen center.
-	// The Y axis is inverted because in screen coordinates the origin is in the top-left corner.
-	v.X = v.X*center.X*-1 + center.X
-	v.Y = v.Y*center.Y*-1 + center.Y
-
-	return v
 }
 
 func (r *Renderer) project(mesh *Mesh, camera *Camera) {
-	r.triangles = r.triangles[:0]
+	r.projections = r.projections[:0]
 	r.DebugInfo = r.DebugInfo[:0]
 
-	// Calculate the world matrix, which is essentially a series of transformations
-	// applied to the mesh vertices that convert them from object's local space to
-	// world space. NOTE: The order is important!
-	worldMatrix := NewIdentity()
-	worldMatrix = NewScale(mesh.Scale.X, mesh.Scale.Y, mesh.Scale.Z).Multiply(worldMatrix)
-	worldMatrix = NewRotationZ(mesh.Rotation.Z).Multiply(worldMatrix)
-	worldMatrix = NewRotationY(mesh.Rotation.Y).Multiply(worldMatrix)
-	worldMatrix = NewRotationX(mesh.Rotation.X).Multiply(worldMatrix)
-	worldMatrix = NewTranslation(mesh.Translation.X, mesh.Translation.Y, mesh.Translation.Z).Multiply(worldMatrix)
+	worldMatrix := NewWorldMatrix(mesh.Scale, mesh.Rotation, mesh.Translation)
+	viewMatrix := NewViewMatrix(camera.Position, camera.Direction, camera.Up)
+	perspectiveMatrix := NewPerspectiveMatrix(r.fovY, r.aspectX, r.zNear, r.zFar)
+	screenMatrix := NewScreenMatrix(r.fb.Width, r.fb.Height)
+	lightDirection := Vec3{Z: -1}.Normalize()
 
-	// Calculate the parameters for the perspective projection
-	aspect := float64(r.fb.Width) / float64(r.fb.Height)
-	fovRadians := camera.FOVAngle * (math.Pi / 180.0)
-	zFar := 100.0
-	zNear := 0.1
+	for fi := range mesh.Faces {
+		face := &mesh.Faces[fi]
+		faceVisible := false
 
-	center := Vec2{X: float64(r.fb.Width) / 2, Y: float64(r.fb.Height) / 2}
-	perspective := NewPerspective(fovRadians, aspect, zNear, zFar)
-
-	// Calculate the light vector
-	lightVector := Vec3{Z: -1}.Normalize()
-
-	for i, face := range mesh.Faces {
-		v1 := worldMatrix.MultiplyVec4(mesh.Vertices[face.A].ToVec4())
-		v2 := worldMatrix.MultiplyVec4(mesh.Vertices[face.B].ToVec4())
-		v3 := worldMatrix.MultiplyVec4(mesh.Vertices[face.C].ToVec4())
-
-		a3, b3, c3 := v1.ToVec3(), v2.ToVec3(), v3.ToVec3()
-		faceNormal := b3.Sub(a3).CrossProduct(c3.Sub(a3)).Normalize()
-		lightIntensity := 0.5
-
-		if r.Lighting {
-			lightIntensity = faceNormal.DotProduct(lightVector) * 0.95
+		points := [3]Vec4{
+			mesh.Vertices[face.A].ToVec4(),
+			mesh.Vertices[face.B].ToVec4(),
+			mesh.Vertices[face.C].ToVec4(),
 		}
 
-		normalDot := faceNormal.DotProduct(camera.Position.Sub(a3).Normalize())
-		if r.BackfaceCulling && normalDot < 0 {
+		for p := range points {
+			points[p] = worldMatrix.MultiplyVec4(points[p])       // Local -> World space
+			points[p] = viewMatrix.MultiplyVec4(points[p])        // World -> View space
+			points[p] = perspectiveMatrix.MultiplyVec4(points[p]) // View -> Clip space
+
+			// Check if the face is in the visible range and not behind the camera
+			if r.frustum.Planes[PlaneNear].IsVertexInside(points[p]) {
+				faceVisible = true
+			}
+		}
+
+		if !faceVisible {
 			continue
 		}
 
-		// Project the vertices to the screen coordinates
-		s0 := projectPoint(v1, &perspective, center)
-		s1 := projectPoint(v2, &perspective, center)
-		s2 := projectPoint(v3, &perspective, center)
+		a, b, c := points[0].ToVec3(), points[1].ToVec3(), points[2].ToVec3()
+		faceNormal := b.Sub(a).CrossProduct(c.Sub(a)).Normalize()
 
-		//if r.BackfaceCulling {
-		//	if (s1.X-s0.X)*(s2.Y-s0.Y)-(s2.X-s0.X)*(s1.Y-s0.Y) > 0 {
-		//		continue
-		//	}
-		//}
+		if r.BackfaceCulling {
+			// Normal-based backface culling (face is not visible if the normal is not facing the camera)
+			if faceNormal.DotProduct(Vec3{0, 0, 0}.Sub(a).Normalize()) < 0 {
+				continue
+			}
+		}
 
-		// Add the triangle to the list of triangles to be rendered
-		r.triangles = append(r.triangles, Triangle{
-			A:         s0,
-			B:         s1,
-			C:         s2,
-			Intensity: lightIntensity,
-			Texture:   mesh.Texture,
-			UVa:       face.UVa,
-			UVb:       face.UVb,
-			UVc:       face.UVc,
-			Z:         (s0.Z + s1.Z + s2.Z) / 3.0,
+		lightIntensity := 0.5
+		if r.Lighting {
+			lightIntensity = faceNormal.DotProduct(lightDirection) * 0.95
+		}
 
-			FaceIndex:    i,
-			VertexIndexA: face.A,
-			VertexIndexB: face.B,
-			VertexIndexC: face.C,
-		})
+		var (
+			// Clipping will produce of up to 9 new triangles
+			clipPoints [maxClipPoints][3]Vec4
+			clipUVs    [maxClipPoints][3]UV
+			clipCount  int
+		)
+
+		if r.FrustumClipping {
+			uvs := [3]UV{face.UVa, face.UVb, face.UVc}
+			clipCount = r.frustum.ClipTriangle(points, uvs, &clipPoints, &clipUVs)
+		} else {
+			clipPoints[0] = [3]Vec4{points[0], points[1], points[2]}
+			clipUVs[0] = [3]UV{face.UVa, face.UVb, face.UVc}
+			clipCount = 1
+		}
+
+		for i := 0; i < clipCount; i++ {
+			newPoints := clipPoints[i]
+
+			for j, v := range newPoints {
+				origW := v.W
+				v = v.Divide(v.W) // Perspective divide
+				v = screenMatrix.MultiplyVec4(Vec4{v.X, v.Y, v.Z, 1})
+				v.W = origW // Need the original W for texture mapping
+				newPoints[j] = v
+			}
+
+			r.projections = append(r.projections, Projection{
+				Points:    newPoints,
+				Texture:   mesh.Texture,
+				Intensity: lightIntensity,
+				UVs:       clipUVs[i],
+			})
+		}
 	}
 }
 
 func (r *Renderer) rasterize() {
 	// Draw triangles to the frame buffer
-	for _, t := range r.triangles {
-		a, b, c := t.A, t.B, t.C
-		uvA, uvB, uvC := t.UVa, t.UVb, t.UVc
+	for i := range r.projections {
+		t := &r.projections[i]
+		a, b, c := t.Points[0], t.Points[1], t.Points[2]
+		uvA, uvB, uvC := t.UVs[0], t.UVs[1], t.UVs[2]
 
 		center := Vec2{
 			X: (a.X + b.X + c.X) / 3,
 			Y: (a.Y + b.Y + c.Y) / 3,
+		}
+
+		if !r.ShowTextures {
+			t.Texture = nil
 		}
 
 		if r.ShowFaces {

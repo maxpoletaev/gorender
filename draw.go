@@ -27,14 +27,14 @@ func (fb *FrameBuffer) Pixel(x, y int, c color.RGBA, z float64) {
 		return
 	}
 
-	if z <= fb.ZBuffer[idx] {
+	if z >= fb.ZBuffer[idx] {
 		fb.Pixels[idx] = c
 		fb.ZBuffer[idx] = z
 	}
 }
 
 func (fb *FrameBuffer) Clear(c color.RGBA) {
-	fb.ZBuffer[0] = 1.0
+	fb.ZBuffer[0] = -1.0
 	fb.Pixels[0] = c
 
 	for i := 1; i < len(fb.Pixels); i *= 2 {
@@ -46,7 +46,7 @@ func (fb *FrameBuffer) Clear(c color.RGBA) {
 func (fb *FrameBuffer) DotGrid(c color.RGBA, step int) {
 	for y := step; y < fb.Height; y += step {
 		for x := step; x < fb.Width; x += step {
-			fb.Pixel(x, y, c, 1.0)
+			fb.Pixel(x, y, c, -1.0)
 		}
 	}
 }
@@ -57,7 +57,7 @@ func (fb *FrameBuffer) Rect(x, y, width, height int, c color.RGBA) {
 	}
 	for py := y; py < y+height; py++ {
 		for px := x; px < x+width; px++ {
-			fb.Pixel(px, py, c, -1)
+			fb.Pixel(px, py, c, 1.0)
 		}
 	}
 }
@@ -72,7 +72,7 @@ func (fb *FrameBuffer) Line(x0, y0 int, x1, y1 int, c color.RGBA) {
 	curX, curY := float64(x0), float64(y0)
 
 	for i := 0; i <= sideLength; i++ {
-		fb.Pixel(int(curX), int(curY), c, -1)
+		fb.Pixel(int(curX), int(curY), c, 1.0)
 		curX += xStep
 		curY += yStep
 	}
@@ -98,14 +98,14 @@ func (fb *FrameBuffer) Triangle(
 	x0, y0 int, w0 float64, u0, v0 float64,
 	x1, y1 int, w1 float64, u1, v1 float64,
 	x2, y2 int, w2 float64, u2, v2 float64,
-	texture Texture,
+	texture *Texture,
 	intensity float64,
 ) {
 	// Find the bounding box of the triangle
 	minX, maxX := min(x0, x1, x2), max(x0, x1, x2)
 	minY, maxY := min(y0, y1, y2), max(y0, y1, y2)
 
-	// Ensure the intensity is in the range [0, 1]
+	// Ensure the intensity is in the range [0.1, 1.0]
 	intensity = max(0.1, min(intensity, 1.0))
 
 	// Find the area of the triangle

@@ -20,7 +20,7 @@ type Mesh struct {
 	Rotation    Vec3
 	Translation Vec3
 	Scale       Vec3
-	Texture     Texture
+	Texture     *Texture
 }
 
 func NewMesh(vertices []Vec3, faces []Face) *Mesh {
@@ -28,19 +28,8 @@ func NewMesh(vertices []Vec3, faces []Face) *Mesh {
 		Vertices: vertices,
 		Faces:    faces,
 		Scale:    Vec3{1, 1, 1},
-		Texture: &SolidTexture{
+		Texture: &Texture{
 			Color: color.RGBA{255, 255, 255, 255},
 		},
-	}
-}
-
-func (m *Mesh) Transform(matrices ...Matrix) {
-	mat := matrices[0]
-	for i := 1; i < len(matrices); i++ {
-		mat = mat.Multiply(matrices[i])
-	}
-
-	for j, v := range m.Vertices {
-		m.Vertices[j] = mat.MultiplyVec4(v.ToVec4()).ToVec3()
 	}
 }

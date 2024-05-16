@@ -20,17 +20,14 @@ const (
 	viewWidth   = 800 / viewScale
 	viewHeight  = 600 / viewScale
 	windowTitle = "goxgl"
+	walkingMode = true
 )
-
-type Camera struct {
-	Position Vec3
-	FOVAngle float64
-}
 
 func onOff(b bool) string {
 	if b {
 		return "ON"
 	}
+
 	return "OFF"
 }
 
@@ -54,7 +51,7 @@ func loadMeshFile(filename string) (*Mesh, error) {
 	return mesh, nil
 }
 
-func loadTextureFile(filename string) (*ImageTexture, error) {
+func loadTextureFile(filename string) (*Texture, error) {
 	file, err := os.Open(filename)
 	if err != nil {
 		return nil, err
@@ -66,7 +63,7 @@ func loadTextureFile(filename string) (*ImageTexture, error) {
 	}
 
 	bounds := img.Bounds()
-	texture := &ImageTexture{
+	texture := &Texture{
 		Width:  bounds.Dx(),
 		Height: bounds.Dy(),
 		Pixels: make([]color.RGBA, bounds.Dx()*bounds.Dy()),
@@ -144,7 +141,6 @@ func main() {
 	}
 
 	fb := NewFrameBuffer(viewWidth, viewHeight)
-	camera := Camera{Position: Vec3{0, 0, -1}, FOVAngle: 45}
 	renderer := NewRenderer(fb)
 
 	mesh, err := loadMeshFile(flag.Arg(0))
@@ -161,8 +157,8 @@ func main() {
 		mesh.Texture = texture
 	}
 
-	mesh.Translation.Z = 5    // Move away from the camera
-	mesh.Rotation.Y = math.Pi // Rotate 180 degrees
+	// Rotate the mesh 180 degrees as the OBJ files are usually exported with -Z as the front face.
+	mesh.Rotation.Y = math.Pi
 
 	var (
 		windowWidth  = int32(fb.Width * viewScale)
@@ -183,10 +179,33 @@ func main() {
 		lastCursorY = rl.GetMouseY()
 	)
 
+	camera := &Camera{
+		Direction: Vec3{0, 0, -1},
+		Position:  Vec3{0, 1, 10},
+		Up:        Vec3{0, 1, 0},
+	}
+
+	rl.DisableCursor()
+
 	for !rl.WindowShouldClose() {
-		renderer.Draw(mesh, &camera)
+		renderer.Draw(mesh, camera)
+
+		forward := camera.Direction.Normalize()
+		forward.Y = 0 // Only move in the XZ plane
+		right := forward.CrossProduct(camera.Up).Normalize()
 
 		switch {
+		// WASD keys to move the camera
+		case rl.IsKeyDown(rl.KeyW):
+			camera.Position = camera.Position.Add(forward.Multiply(0.1))
+		case rl.IsKeyDown(rl.KeyS):
+			camera.Position = camera.Position.Sub(forward.Multiply(0.1))
+		case rl.IsKeyDown(rl.KeyA):
+			camera.Position = camera.Position.Sub(right.Multiply(0.1))
+		case rl.IsKeyDown(rl.KeyD):
+			camera.Position = camera.Position.Add(right.Multiply(0.1))
+
+		// Render options
 		case rl.IsKeyPressed(rl.KeyB):
 			renderer.BackfaceCulling = !renderer.BackfaceCulling
 		case rl.IsKeyPressed(rl.KeyE):
@@ -197,24 +216,42 @@ func main() {
 			renderer.ShowVertices = !renderer.ShowVertices
 		case rl.IsKeyPressed(rl.KeyL):
 			renderer.Lighting = !renderer.Lighting
-		case rl.IsKeyPressed(rl.KeyD):
+		case rl.IsKeyPressed(rl.KeyX):
 			renderer.DebugEnabled = !renderer.DebugEnabled
+		case rl.IsKeyPressed(rl.KeyC):
+			renderer.FrustumClipping = !renderer.FrustumClipping
+		case rl.IsKeyPressed(rl.KeyT):
+			renderer.ShowTextures = !renderer.ShowTextures
 		}
 
 		cursorX := rl.GetMouseX()
 		cursorY := rl.GetMouseY()
 
-		if rl.IsMouseButtonDown(rl.MouseLeftButton) {
+		if walkingMode {
 			deltaX := cursorX - lastCursorX
 			deltaY := cursorY - lastCursorY
 
 			if deltaX != 0 || deltaY != 0 {
-				if rl.IsKeyDown(rl.KeyLeftShift) || rl.IsKeyDown(rl.KeyRightShift) {
-					mesh.Translation.X -= float64(deltaX) * 0.005
-					mesh.Translation.Y -= float64(deltaY) * 0.005
-				} else {
-					mesh.Rotation.X -= float64(deltaY) * 0.01
-					mesh.Rotation.Y += float64(deltaX) * 0.01
+				yaw := -float64(deltaX) * 0.001
+				pitch := -float64(deltaY) * 0.001
+				yawQuaternion := NewQuaternionFromAxisAngle(camera.Up, yaw)
+				pitchQuaternion := NewQuaternionFromAxisAngle(right, pitch)
+				camera.Direction = yawQuaternion.Rotate(camera.Direction).Normalize()
+				camera.Direction = pitchQuaternion.Rotate(camera.Direction).Normalize()
+			}
+		} else {
+			if rl.IsMouseButtonDown(rl.MouseLeftButton) {
+				deltaX := cursorX - lastCursorX
+				deltaY := cursorY - lastCursorY
+
+				if deltaX != 0 || deltaY != 0 {
+					if rl.IsKeyDown(rl.KeyLeftShift) || rl.IsKeyDown(rl.KeyRightShift) {
+						mesh.Translation.X -= float64(deltaX) * 0.005
+						mesh.Translation.Y -= float64(deltaY) * 0.005
+					} else {
+						mesh.Rotation.X -= float64(deltaY) * 0.01
+						mesh.Rotation.Y += float64(deltaX) * 0.01
+					}
 				}
 			}
 		}
@@ -251,18 +288,36 @@ func main() {
 		drawText(5, 25, fmt.Sprintf("vertices: %d", len(mesh.Vertices)))
 		drawText(5, 35, fmt.Sprintf("faces: %d", len(mesh.Faces)))
 
-		drawText(5, windowHeight-15, fmt.Sprintf("[V]erticies: %s [E]dges: %s [F]aces: %s, [L]ights: %s, [B]ackface culling: %s",
-			onOff(renderer.ShowVertices),
-			onOff(renderer.ShowEdges),
-			onOff(renderer.ShowFaces),
-			onOff(renderer.Lighting),
-			onOff(renderer.BackfaceCulling),
-		))
+		drawText(
+			5,
+			windowHeight-15,
+			fmt.Sprintf(
+				"[V]erticies: %s [E]dges: %s [F]aces: %s, [L]ights: %s, [B]ackface culling: %s, [C]lipping: %s, [T]extures: %s",
+				onOff(renderer.ShowVertices),
+				onOff(renderer.ShowEdges),
+				onOff(renderer.ShowFaces),
+				onOff(renderer.Lighting),
+				onOff(renderer.BackfaceCulling),
+				onOff(renderer.FrustumClipping),
+				onOff(renderer.ShowTextures),
+			),
+		)
 
 		for _, info := range renderer.DebugInfo {
 			rl.DrawText(info.Text, int32(info.X*viewScale)+1, int32(info.Y*viewScale)+1, 12, rl.Black)
 			rl.DrawText(info.Text, int32(info.X*viewScale), int32(info.Y*viewScale), 12, rl.Yellow)
 		}
+
+		drawText(
+			5,
+			windowHeight-35,
+			fmt.Sprintf(
+				"Camera X=%.2f Y=%.2f Z=%.2f",
+				camera.Position.X,
+				camera.Position.Y,
+				camera.Position.Z,
+			),
+		)
 
 		rl.EndDrawing()
 	}

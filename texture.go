@@ -4,25 +4,24 @@ import (
 	"image/color"
 )
 
-type Texture interface {
-	Sample(u, v float64) color.RGBA
-}
-
-type ImageTexture struct {
+type Texture struct {
 	Width, Height int
+	Color         color.RGBA
 	Pixels        []color.RGBA
 }
 
-func (t *ImageTexture) Sample(u, v float64) color.RGBA {
+func (t *Texture) Sample(u, v float64) color.RGBA {
+	if t.Pixels == nil {
+		return t.Color
+	}
+
 	x := abs(int(u*float64(t.Width))+t.Width) % t.Width
 	y := abs(int(v*float64(t.Height))+t.Height) % t.Height
-	return t.Pixels[y*t.Width+x]
-}
+	px := t.Pixels[y*t.Width+x]
 
-type SolidTexture struct {
-	Color color.RGBA
-}
+	if px.A == 0 {
+		return t.Color
+	}
 
-func (t *SolidTexture) Sample(u, v float64) color.RGBA {
-	return t.Color
+	return px
 }
