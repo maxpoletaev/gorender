@@ -3,6 +3,8 @@ package main
 import (
 	"image/color"
 	"math"
+	"runtime"
+	"sync"
 )
 
 var (
@@ -37,6 +39,9 @@ type Renderer struct {
 	zNear, zFar      float64
 	fovX, fovY       float64
 
+	wg          sync.WaitGroup
+	toRasterize chan *Projection
+
 	FrustumClipping bool
 	ShowVertices    bool
 	ShowEdges       bool
@@ -56,10 +61,10 @@ func NewRenderer(fb *FrameBuffer) *Renderer {
 	fovY := 45 * (math.Pi / 180)
 	fovX := 2 * math.Atan(math.Tan(fovY/2)*aspectX)
 
-	zFar, zNear := 100.0, 0.1
+	zNear, zFar := 0.0, 50.0
 	frustum := NewFrustum(zNear, zFar)
 
-	return &Renderer{
+	r := &Renderer{
 		fb:              fb,
 		ShowFaces:       true,
 		BackfaceCulling: true,
@@ -73,27 +78,34 @@ func NewRenderer(fb *FrameBuffer) *Renderer {
 		frustum:         frustum,
 		zNear:           zNear,
 		zFar:            zFar,
+		toRasterize:     make(chan *Projection),
 	}
+
+	for i := 0; i < runtime.NumCPU(); i++ {
+		go r.startWorker()
+	}
+
+	return r
 }
 
-func (r *Renderer) project(mesh *Mesh, camera *Camera) {
+func (r *Renderer) project(object *Object, camera *Camera) {
 	r.projections = r.projections[:0]
 	r.DebugInfo = r.DebugInfo[:0]
 
-	worldMatrix := NewWorldMatrix(mesh.Scale, mesh.Rotation, mesh.Translation)
+	worldMatrix := NewWorldMatrix(object.Scale, object.Rotation, object.Translation)
 	viewMatrix := NewViewMatrix(camera.Position, camera.Direction, camera.Up)
 	perspectiveMatrix := NewPerspectiveMatrix(r.fovY, r.aspectX, r.zNear, r.zFar)
 	screenMatrix := NewScreenMatrix(r.fb.Width, r.fb.Height)
-	lightDirection := Vec3{Z: -1}.Normalize()
+	lightDirection := Vec3{Y: 0.5, Z: -1}.Normalize()
 
-	for fi := range mesh.Faces {
-		face := &mesh.Faces[fi]
+	for fi := range object.Faces {
+		face := &object.Faces[fi]
 		faceVisible := false
 
 		points := [3]Vec4{
-			mesh.Vertices[face.A].ToVec4(),
-			mesh.Vertices[face.B].ToVec4(),
-			mesh.Vertices[face.C].ToVec4(),
+			object.Vertices[face.A].ToVec4(),
+			object.Vertices[face.B].ToVec4(),
+			object.Vertices[face.C].ToVec4(),
 		}
 
 		for p := range points {
@@ -101,7 +113,7 @@ func (r *Renderer) project(mesh *Mesh, camera *Camera) {
 			points[p] = viewMatrix.MultiplyVec4(points[p])        // World -> View space
 			points[p] = perspectiveMatrix.MultiplyVec4(points[p]) // View -> Clip space
 
-			// Check if the face is in the visible range and not behind the camera
+			// Check if the face is not behind the camera
 			if r.frustum.Planes[PlaneNear].IsVertexInside(points[p]) {
 				faceVisible = true
 			}
@@ -155,12 +167,40 @@ func (r *Renderer) project(mesh *Mesh, camera *Camera) {
 
 			r.projections = append(r.projections, Projection{
 				Points:    newPoints,
-				Texture:   mesh.Texture,
+				Texture:   object.Texture,
 				Intensity: lightIntensity,
 				UVs:       clipUVs[i],
 			})
 		}
 	}
+}
+
+func (r *Renderer) startWorker() {
+	for {
+		t := <-r.toRasterize
+		a, b, c := t.Points[0], t.Points[1], t.Points[2]
+		uvA, uvB, uvC := t.UVs[0], t.UVs[1], t.UVs[2]
+
+		r.fb.Triangle(
+			int(a.X), int(a.Y), a.W, uvA.U, uvA.V,
+			int(b.X), int(b.Y), b.W, uvB.U, uvB.V,
+			int(c.X), int(c.Y), c.W, uvC.U, uvC.V,
+			t.Texture,
+			t.Intensity,
+		)
+
+		r.wg.Done()
+	}
+}
+
+func (r *Renderer) rasterizeParallel() {
+	r.wg.Add(len(r.projections))
+
+	for i := range r.projections {
+		r.toRasterize <- &r.projections[i]
+	}
+
+	r.wg.Wait()
 }
 
 func (r *Renderer) rasterize() {
@@ -213,9 +253,14 @@ func (r *Renderer) rasterize() {
 	}
 }
 
-func (r *Renderer) Draw(mesh *Mesh, camera *Camera) {
-	r.fb.Clear(color.RGBA{30, 30, 30, 255})
+func (r *Renderer) Draw(objects []*Object, camera *Camera) {
+	r.fb.Clear(color.RGBA{50, 50, 50, 255})
 	r.fb.DotGrid(color.RGBA{100, 100, 100, 255}, 10)
-	r.project(mesh, camera)
-	r.rasterize()
+
+	for i := range objects {
+		r.project(objects[i], camera)
+		r.rasterizeParallel()
+	}
+
+	r.fb.Fog(0.100, 0.033, color.RGBA{255, 255, 255, 255})
 }

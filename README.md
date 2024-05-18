@@ -41,6 +41,7 @@ $ ./goxgl models/suzanne.obj
  * [Math for Game Developers](https://www.youtube.com/playlist?list=PLW3Zl3wyJwWOpdhYedlD-yCB7WQoHf-My) series by Jorge Rodriguez
  * Code-It-Yourself! - 3D Graphics Engine series by javidx9: [part 1][CIY-1], [part 2][CIY-2], [part 3][CIY-3], [part 4][CIY-4]
  * [60005/70090 Computer Graphics lectures](https://wp.doc.ic.ac.uk/bkainz/teaching/60005-co317-computer-graphics/) by Bernhard Kainz at Imperial College London
+ * [Optimizing Software Occlusion Culling](https://fgiesen.wordpress.com/2013/02/17/optimizing-sw-occlusion-culling-index/) series by Fabian Giesen
  * [Alias/WaveFront Object (.obj) File Format](https://people.computing.clemson.edu/~dhouse/courses/405/docs/brief-obj-file-format.html)
 
 [CIY-1]: https://www.youtube.com/watch?v=ih20l3pJoeU&list=PLrOv9FMX8xJE8NgepZR1etrsU63fDDGxO&index=22&t=1938s&pp=iAQB

@@ -4,9 +4,12 @@ import (
 	"math"
 )
 
-// Vec2 represents a 2D vector.
 type Vec2 struct {
 	X, Y float64
+}
+
+func Vec2FromArray(arr [2]float64) Vec2 {
+	return Vec2{arr[0], arr[1]}
 }
 
 func (v Vec2) Add(other Vec2) Vec2 {
@@ -37,9 +40,12 @@ func (v Vec2) Normalize() Vec2 {
 	return v.Divide(v.Length())
 }
 
-// Vec3 represents a 3D vector.
 type Vec3 struct {
 	X, Y, Z float64
+}
+
+func Vec3FromArray(arr [3]float64) Vec3 {
+	return Vec3{arr[0], arr[1], arr[2]}
 }
 
 func (v Vec3) ToVec4() Vec4 {
@@ -81,34 +87,9 @@ func (v Vec3) Normalize() Vec3 {
 	return v.Divide(v.Length())
 }
 
-func (v Vec3) RotateX(angle float64) Vec3 {
-	cos := math.Cos(angle)
-	sin := math.Sin(angle)
-	return Vec3{
-		X: v.X,
-		Y: v.Y*cos - v.Z*sin,
-		Z: v.Y*sin + v.Z*cos,
-	}
-}
-
-func (v Vec3) RotateY(angle float64) Vec3 {
-	cos := math.Cos(angle)
-	sin := math.Sin(angle)
-	return Vec3{
-		X: v.X*cos + v.Z*sin,
-		Y: v.Y,
-		Z: -v.X*sin + v.Z*cos,
-	}
-}
-
-func (v Vec3) RotateZ(angle float64) Vec3 {
-	cos := math.Cos(angle)
-	sin := math.Sin(angle)
-	return Vec3{
-		X: v.X*cos - v.Y*sin,
-		Y: v.X*sin + v.Y*cos,
-		Z: v.Z,
-	}
+func (v Vec3) ToRadians() Vec3 {
+	f := math.Pi / 180
+	return Vec3{v.X * f, v.Y * f, v.Z * f}
 }
 
 type Vec4 struct {

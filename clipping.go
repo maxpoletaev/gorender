@@ -121,9 +121,18 @@ func (f *Frustum) ClipTriangle(
 		Count:  3,
 	}
 
+	planes := []int{
+		PlaneLeft,
+		PlaneRight,
+		PlaneTop,
+		PlaneBottom,
+		PlaneNear,
+		PlaneFar,
+	}
+
 	// Iterate over each plane of the frustum and build a polygon from the input
 	// triangle, containing only the vertices that are inside the frustum.
-	for pi := range f.Planes {
+	for _, pi := range planes {
 		var newPolygon Polygon
 		plane := &f.Planes[pi]
 

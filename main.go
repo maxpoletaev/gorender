@@ -3,24 +3,19 @@ package main
 import (
 	"flag"
 	"fmt"
-	"image"
-	"image/color"
 	_ "image/png"
 	"log"
-	"math"
 	"os"
-	"path"
 	"runtime/pprof"
 
 	rl "github.com/gen2brain/raylib-go/raylib"
 )
 
 const (
-	viewScale   = 2
-	viewWidth   = 800 / viewScale
-	viewHeight  = 600 / viewScale
+	viewScale   = 1
+	viewWidth   = 1280 / viewScale
+	viewHeight  = 1024 / viewScale
 	windowTitle = "goxgl"
-	walkingMode = true
 )
 
 func onOff(b bool) string {
@@ -31,65 +26,15 @@ func onOff(b bool) string {
 	return "OFF"
 }
 
-func loadMeshFile(filename string) (*Mesh, error) {
-	file, err := os.Open(filename)
-	if err != nil {
-		return nil, err
-	}
-
-	defer func() {
-		_ = file.Close()
-	}()
-
-	mesh, err := ReadObj(file)
-	if err != nil {
-		return nil, err
-	}
-
-	mesh.Name = path.Base(filename)
-
-	return mesh, nil
-}
-
-func loadTextureFile(filename string) (*Texture, error) {
-	file, err := os.Open(filename)
-	if err != nil {
-		return nil, err
-	}
-
-	img, _, err := image.Decode(file)
-	if err != nil {
-		return nil, err
-	}
-
-	bounds := img.Bounds()
-	texture := &Texture{
-		Width:  bounds.Dx(),
-		Height: bounds.Dy(),
-		Pixels: make([]color.RGBA, bounds.Dx()*bounds.Dy()),
-	}
-
-	for y := 0; y < texture.Height; y++ {
-		for x := 0; x < texture.Width; x++ {
-			c := color.RGBAModel.Convert(img.At(x, y)).(color.RGBA)
-			texture.Pixels[y*texture.Width+x] = c
-		}
-	}
-
-	return texture, nil
-}
-
 type options struct {
 	cpuProfile string
 	memProfile string
-	texture    string
 }
 
 func parseOptions() *options {
 	opts := &options{}
 	flag.StringVar(&opts.cpuProfile, "cpuprof", "", "write cpu profile to file")
 	flag.StringVar(&opts.memProfile, "memprof", "", "write memory profile to file")
-	flag.StringVar(&opts.texture, "texture", "", "texture file")
 	flag.Parse()
 	return opts
 }
@@ -143,33 +88,24 @@ func main() {
 	fb := NewFrameBuffer(viewWidth, viewHeight)
 	renderer := NewRenderer(fb)
 
-	mesh, err := loadMeshFile(flag.Arg(0))
+	scene, err := LoadSceneFile(flag.Arg(0))
 	if err != nil {
-		log.Fatalf("failed to load mesh: %s", err)
+		log.Fatalf("failed to load scene file: %s", err)
 	}
-
-	if opts.texture != "" {
-		texture, err := loadTextureFile(opts.texture)
-		if err != nil {
-			log.Fatalf("failed to load texture: %s", err)
-		}
-
-		mesh.Texture = texture
-	}
-
-	// Rotate the mesh 180 degrees as the OBJ files are usually exported with -Z as the front face.
-	mesh.Rotation.Y = math.Pi
 
 	var (
 		windowWidth  = int32(fb.Width * viewScale)
 		windowHeight = int32(fb.Height * viewScale)
+		numVertices  = scene.NumVertices()
+		numTriangles = scene.NumTriangles()
+		oumObjects   = scene.NumObjects()
 	)
 
 	rl.SetTraceLogLevel(rl.LogError) // Make raylib less verbose
 	rl.InitWindow(windowWidth, windowHeight, windowTitle)
 	defer rl.CloseWindow()
 
-	rl.SetTargetFPS(30)
+	rl.SetTargetFPS(60)
 
 	renderTexture := rl.LoadRenderTexture(int32(fb.Width), int32(fb.Height))
 	defer rl.UnloadRenderTexture(renderTexture)
@@ -185,10 +121,25 @@ func main() {
 		Up:        Vec3{0, 1, 0},
 	}
 
+	triggerDraw := make(chan struct{})
+	frameReady := make(chan struct{})
+
+	go func() {
+		for {
+			<-triggerDraw
+			cameraCopy := *camera
+			renderer.Draw(scene.Objects, &cameraCopy)
+			frameReady <- struct{}{}
+		}
+	}()
+
 	rl.DisableCursor()
+	triggerDraw <- struct{}{}
 
 	for !rl.WindowShouldClose() {
-		renderer.Draw(mesh, camera)
+		<-frameReady
+		fb.SwapBuffers()
+		triggerDraw <- struct{}{}
 
 		forward := camera.Direction.Normalize()
 		forward.Y = 0 // Only move in the XZ plane
@@ -197,13 +148,13 @@ func main() {
 		switch {
 		// WASD keys to move the camera
 		case rl.IsKeyDown(rl.KeyW):
-			camera.Position = camera.Position.Add(forward.Multiply(0.1))
+			camera.Position = camera.Position.Add(forward.Multiply(0.15))
 		case rl.IsKeyDown(rl.KeyS):
-			camera.Position = camera.Position.Sub(forward.Multiply(0.1))
+			camera.Position = camera.Position.Sub(forward.Multiply(0.15))
 		case rl.IsKeyDown(rl.KeyA):
-			camera.Position = camera.Position.Sub(right.Multiply(0.1))
+			camera.Position = camera.Position.Sub(right.Multiply(0.15))
 		case rl.IsKeyDown(rl.KeyD):
-			camera.Position = camera.Position.Add(right.Multiply(0.1))
+			camera.Position = camera.Position.Add(right.Multiply(0.15))
 
 		// Render options
 		case rl.IsKeyPressed(rl.KeyB):
@@ -227,49 +178,24 @@ func main() {
 		cursorX := rl.GetMouseX()
 		cursorY := rl.GetMouseY()
 
-		if walkingMode {
-			deltaX := cursorX - lastCursorX
-			deltaY := cursorY - lastCursorY
+		deltaX := cursorX - lastCursorX
+		deltaY := cursorY - lastCursorY
 
-			if deltaX != 0 || deltaY != 0 {
-				yaw := -float64(deltaX) * 0.001
-				pitch := -float64(deltaY) * 0.001
-				yawQuaternion := NewQuaternionFromAxisAngle(camera.Up, yaw)
-				pitchQuaternion := NewQuaternionFromAxisAngle(right, pitch)
-				camera.Direction = yawQuaternion.Rotate(camera.Direction).Normalize()
-				camera.Direction = pitchQuaternion.Rotate(camera.Direction).Normalize()
-			}
-		} else {
-			if rl.IsMouseButtonDown(rl.MouseLeftButton) {
-				deltaX := cursorX - lastCursorX
-				deltaY := cursorY - lastCursorY
-
-				if deltaX != 0 || deltaY != 0 {
-					if rl.IsKeyDown(rl.KeyLeftShift) || rl.IsKeyDown(rl.KeyRightShift) {
-						mesh.Translation.X -= float64(deltaX) * 0.005
-						mesh.Translation.Y -= float64(deltaY) * 0.005
-					} else {
-						mesh.Rotation.X -= float64(deltaY) * 0.01
-						mesh.Rotation.Y += float64(deltaX) * 0.01
-					}
-				}
-			}
+		if deltaX != 0 || deltaY != 0 {
+			yaw := -float64(deltaX) * 0.002
+			pitch := -float64(deltaY) * 0.002
+			yawQuaternion := NewQuaternionFromAxisAngle(camera.Up, yaw)
+			pitchQuaternion := NewQuaternionFromAxisAngle(right, pitch)
+			camera.Direction = yawQuaternion.Rotate(camera.Direction).Normalize()
+			camera.Direction = pitchQuaternion.Rotate(camera.Direction).Normalize()
 		}
 
 		lastCursorX = cursorX
 		lastCursorY = cursorY
 
-		// Zoom in/out with the mouse wheel
-		if wheelMove := rl.GetMouseWheelMove(); wheelMove != 0 {
-			factor := float64(wheelMove) * 0.01
-			mesh.Scale.X += factor
-			mesh.Scale.Y += factor
-			mesh.Scale.Z += factor
-		}
-
 		// Copy the frame buffer to the render texture
 		rl.BeginTextureMode(renderTexture)
-		rl.UpdateTexture(renderTexture.Texture, fb.Pixels)
+		rl.UpdateTexture(renderTexture.Texture, fb.Pixels2)
 		rl.EndTextureMode()
 
 		// Draw the render texture to the screen
@@ -284,9 +210,9 @@ func main() {
 		)
 
 		drawText(5, 5, fmt.Sprintf("%d fps", rl.GetFPS()))
-		drawText(5, 15, path.Base(mesh.Name))
-		drawText(5, 25, fmt.Sprintf("vertices: %d", len(mesh.Vertices)))
-		drawText(5, 35, fmt.Sprintf("faces: %d", len(mesh.Faces)))
+		drawText(5, 15, fmt.Sprintf("objects: %d", oumObjects))
+		drawText(5, 25, fmt.Sprintf("vertices: %d", numVertices))
+		drawText(5, 35, fmt.Sprintf("triangles: %d", numTriangles))
 
 		drawText(
 			5,
