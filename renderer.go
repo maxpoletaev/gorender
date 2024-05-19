@@ -29,7 +29,7 @@ type Triangle struct {
 	UVs         [3]UV
 	Texture     *Texture
 	Intensity   float64
-	TileNumbers [maxTiles]bool // TODO: shall we bitmask?
+	TileNumbers uint16
 }
 
 type DebugInfo struct {
@@ -95,9 +95,9 @@ type Renderer struct {
 	// Parallel rendering stuff
 	toProject      chan projectionTask
 	toDraw         chan rasterizationTask
+	triangles      []Triangle
 	tileBoundaries [maxTiles][2]Vec2
 	wg             sync.WaitGroup
-	triangles      []Triangle
 	mut            sync.Mutex
 	numTiles       int
 }
@@ -127,8 +127,8 @@ func NewRenderer(fb *FrameBuffer) *Renderer {
 		zNear:           zNear,
 		zFar:            zFar,
 		numTiles:        1,
-		toProject:       make(chan projectionTask),
-		toDraw:          make(chan rasterizationTask),
+		toProject:       make(chan projectionTask, 256),
+		toDraw:          make(chan rasterizationTask, maxTiles),
 	}
 
 	if parallelRendering {
@@ -197,20 +197,23 @@ func (r *Renderer) renderTile(tileID int) {
 	for i := range r.triangles {
 		proj := &r.triangles[i]
 
-		if proj.TileNumbers[tileID] {
+		if proj.TileNumbers&(1<<tileID) != 0 {
 			r.drawProjection(proj)
 		}
 	}
 }
 
-func (r *Renderer) IsTriangleCrossingTile(points [3]Vec4, tile int) bool {
+func (r *Renderer) IsTriangleCrossingTile(points *[3]Vec4, tile int) bool {
 	var (
 		start = r.tileBoundaries[tile][0]
 		end   = r.tileBoundaries[tile][1]
 	)
 
-	for _, p := range points {
-		if p.X >= start.X && p.X <= end.X && p.Y >= start.Y && p.Y <= end.Y {
+	for i := range points {
+		if points[i].X >= start.X &&
+			points[i].X <= end.X &&
+			points[i].Y >= start.Y &&
+			points[i].Y <= end.Y {
 			return true
 		}
 	}
@@ -283,7 +286,7 @@ func (r *Renderer) projectObject(object *Object, camera *Camera) {
 		}
 
 		var (
-			// Clipping will produce of up to 9 new triangles
+			// Clipping will produce of up to 9 new tileTriangles
 			clipPoints [maxClipPoints][3]Vec4
 			clipUVs    [maxClipPoints][3]UV
 			clipCount  int
@@ -292,7 +295,7 @@ func (r *Renderer) projectObject(object *Object, camera *Camera) {
 		// TODO: check if clipping is needed (all points are inside)
 		if r.FrustumClipping {
 			uvs := [3]UV{face.UVa, face.UVb, face.UVc}
-			clipCount = r.frustum.ClipTriangle(points, uvs, &clipPoints, &clipUVs)
+			clipCount = r.frustum.ClipTriangle(&points, &uvs, &clipPoints, &clipUVs)
 		} else {
 			clipPoints[0] = [3]Vec4{points[0], points[1], points[2]}
 			clipUVs[0] = [3]UV{face.UVa, face.UVb, face.UVc}
@@ -300,7 +303,7 @@ func (r *Renderer) projectObject(object *Object, camera *Camera) {
 		}
 
 		for i := 0; i < clipCount; i++ {
-			newPoints := clipPoints[i]
+			newPoints := &clipPoints[i]
 
 			for j, v := range newPoints {
 				origW := v.W
@@ -310,20 +313,20 @@ func (r *Renderer) projectObject(object *Object, camera *Camera) {
 				newPoints[j] = v
 			}
 
-			// Precompute which tiles the triangle should be rendered to
-			tileNumbers := [maxTiles]bool{}
-			for t := 0; t < r.numTiles; t++ {
-				tileNumbers[t] = r.IsTriangleCrossingTile(newPoints, t)
-			}
-
 			// Keep the triangle in the local buffer to avoid tacking
 			// the global mutex too often
 			localBuf[localBufSize] = Triangle{
-				Points:      newPoints,
-				Texture:     object.Texture,
-				Intensity:   lightIntensity,
-				UVs:         clipUVs[i],
-				TileNumbers: tileNumbers,
+				Points:    *newPoints,
+				UVs:       clipUVs[i],
+				Texture:   object.Texture,
+				Intensity: lightIntensity,
+			}
+
+			for t := 0; t < r.numTiles; t++ {
+				// Precompute which tiles the triangle should be rendered to
+				if r.IsTriangleCrossingTile(newPoints, t) {
+					localBuf[localBufSize].TileNumbers |= 1 << t
+				}
 			}
 
 			// Flush the buffer once it's full
@@ -336,7 +339,7 @@ func (r *Renderer) projectObject(object *Object, camera *Camera) {
 		}
 	}
 
-	// Flush the remaining triangles
+	// Flush the remaining tileTriangles
 	if localBufSize != 0 {
 		r.mut.Lock()
 		r.triangles = append(r.triangles, localBuf[:]...)
@@ -351,6 +354,7 @@ func (r *Renderer) startWorker() {
 		case task := <-r.toProject:
 			r.projectObject(task.object, task.camera)
 			r.wg.Done()
+
 		case task := <-r.toDraw:
 			r.renderTile(task.tile)
 			r.wg.Done()
@@ -374,7 +378,6 @@ func (r *Renderer) drawTilesBoundaries() {
 
 func (r *Renderer) Draw(objects []*Object, camera *Camera) {
 	r.triangles = r.triangles[:0]
-
 	r.fb.Clear(color.RGBA{50, 50, 50, 255})
 	r.fb.DotGrid(color.RGBA{100, 100, 100, 255}, 10)
 
@@ -402,7 +405,7 @@ func (r *Renderer) Draw(objects []*Object, camera *Camera) {
 		}
 	}
 
-	r.drawTilesBoundaries()
+	//r.drawTilesBoundaries()
 	r.fb.CrossHair(color.RGBA{255, 255, 0, 255})
-	r.fb.Fog(0.100, 0.033, color.RGBA{100, 100, 100, 255})
+	//r.fb.Fog(0.100, 0.033, color.RGBA{100, 100, 100, 255})
 }
