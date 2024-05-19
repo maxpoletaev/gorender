@@ -1,8 +1,8 @@
 # goxgl
 
-A purely software (no OpenGL or DirectX) 3D rasterizer, that I’m trying to build 
-to learn some math and magic behind 3D graphics. It uses raylib for window 
-management and delivering pixels to the screen, but all the rendering is done 
+A purely software (no OpenGL or DirectX) realtime 3D renderer, that I’m trying
+to build to learn some math and magic behind 3D graphics. It uses raylib for window 
+management and delivering pixels to the screen, but all the rendering is done
 from scratch in Go with no external libraries.
 
 ![screenshot](screenshot.png)
@@ -22,17 +22,22 @@ $ make build
 $ ./goxgl models/suzanne.obj
 ```
 
+Camera uses WASD + mouse to move around (like in most first-person games). ESC
+key closes the window. There is also a bunch of keys to toggle different rendering
+options like wireframe, texturing, backface culling, etc.
+
 ## Features
 
- * [x] Wireframe rendering
- * [x] OBJ file loading
- * [x] Backface culling
- * [x] Transformations
- * [x] Texture mapping
- * [x] Flat shading
- * [ ] Gouraud shading
- * [x] Z-buffering
- * [x] View frustum clipping
+ * Wireframe rendering
+ * Backface culling
+ * Affine texture mapping
+ * Perspective correct texture mapping
+ * Flat shading
+ * Z-buffering
+ * View frustum clipping
+ * OBJ file support (with MTL files) - only triangulated
+ * Parallel tile-based rendering
+ * Multi-object scenes support
 
 ## Resources
 
@@ -43,6 +48,8 @@ $ ./goxgl models/suzanne.obj
  * [60005/70090 Computer Graphics lectures](https://wp.doc.ic.ac.uk/bkainz/teaching/60005-co317-computer-graphics/) by Bernhard Kainz at Imperial College London
  * [Optimizing Software Occlusion Culling](https://fgiesen.wordpress.com/2013/02/17/optimizing-sw-occlusion-culling-index/) series by Fabian Giesen
  * [Alias/WaveFront Object (.obj) File Format](https://people.computing.clemson.edu/~dhouse/courses/405/docs/brief-obj-file-format.html)
+ * [Doom E1M1: Hangar - Map (.obj)](https://sketchfab.com/3d-models/doom-e1m1-hangar-map-2148fb6a3fe7454b901fcea67d70b318) by pancakesbassoondonut
+ * [16x16 pixel textures](https://piiixl.itch.io/textures) by PiiiXL
 
 [CIY-1]: https://www.youtube.com/watch?v=ih20l3pJoeU&list=PLrOv9FMX8xJE8NgepZR1etrsU63fDDGxO&index=22&t=1938s&pp=iAQB
 [CIY-2]: https://www.youtube.com/watch?v=XgMWc6LumG4&list=PLrOv9FMX8xJE8NgepZR1etrsU63fDDGxO&index=23&pp=iAQB

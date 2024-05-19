@@ -14,11 +14,12 @@ import (
 )
 
 const (
-	viewScale   = 2
-	viewWidth   = 800 / viewScale
-	viewHeight  = 600 / viewScale
-	frameRate   = 60
-	windowTitle = "goxgl"
+	downscaleFactor = 2
+	viewWidth       = 800 / downscaleFactor
+	viewHeight      = 600 / downscaleFactor
+	parallel        = true
+	frameRate       = 60
+	windowTitle     = "goxgl"
 )
 
 func onOff(b bool) string {
@@ -153,8 +154,8 @@ func main() {
 	}
 
 	var (
-		windowWidth  = int32(fb.Width * viewScale)
-		windowHeight = int32(fb.Height * viewScale)
+		windowWidth  = int32(fb.Width * downscaleFactor)
+		windowHeight = int32(fb.Height * downscaleFactor)
 		numVertices  = scene.NumVertices()
 		numTriangles = scene.NumTriangles()
 		oumObjects   = scene.NumObjects()
@@ -169,14 +170,9 @@ func main() {
 	renderTexture := rl.LoadRenderTexture(int32(fb.Width), int32(fb.Height))
 	defer rl.UnloadRenderTexture(renderTexture)
 
-	var (
-		lastCursorX = rl.GetMouseX()
-		lastCursorY = rl.GetMouseY()
-	)
-
 	camera := &Camera{
-		Direction: Vec3{0, 0, 1},
-		Position:  Vec3{10, 5, -2},
+		Direction: Vec3{0, 0, -1},
+		Position:  Vec3{0, 0, 5},
 		Up:        Vec3{0, 1, 0},
 	}
 
@@ -194,6 +190,11 @@ func main() {
 
 	rl.DisableCursor()
 	triggerDraw <- struct{}{}
+
+	var (
+		lastCursorX = rl.GetMouseX()
+		lastCursorY = rl.GetMouseY()
+	)
 
 	for !rl.WindowShouldClose() {
 		<-frameReady
@@ -262,7 +263,7 @@ func main() {
 		rl.DrawTexturePro(
 			renderTexture.Texture,
 			rl.NewRectangle(0, 0, float32(fb.Width), float32(fb.Height)),
-			rl.NewRectangle(0, 0, float32(fb.Width*viewScale), float32(fb.Height*viewScale)),
+			rl.NewRectangle(0, 0, float32(fb.Width*downscaleFactor), float32(fb.Height*downscaleFactor)),
 			rl.NewVector2(0, 0),
 			0,
 			rl.White,
@@ -289,8 +290,8 @@ func main() {
 		)
 
 		for _, info := range renderer.DebugInfo {
-			rl.DrawText(info.Text, int32(info.X*viewScale)+1, int32(info.Y*viewScale)+1, 12, rl.Black)
-			rl.DrawText(info.Text, int32(info.X*viewScale), int32(info.Y*viewScale), 12, rl.Yellow)
+			rl.DrawText(info.Text, int32(info.X*downscaleFactor)+1, int32(info.Y*downscaleFactor)+1, 12, rl.Black)
+			rl.DrawText(info.Text, int32(info.X*downscaleFactor), int32(info.Y*downscaleFactor), 12, rl.Yellow)
 		}
 
 		drawText(

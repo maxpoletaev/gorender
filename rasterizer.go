@@ -148,9 +148,12 @@ func (fb *FrameBuffer) Triangle(
 			u := (alphaZ*u0 + betaZ*u1 + gammaZ*u2) / zRec
 			v := (alphaZ*v0 + betaZ*v1 + gammaZ*v2) / zRec
 
-			c := texture.Sample(u, v)
-			c = colorIntensity(c, intensity)
+			c := faceColor
+			if texture != nil {
+				c = texture.Sample(u, v)
+			}
 
+			c = colorIntensity(c, intensity)
 			fb.Pixel(x, y, c, -zRec)
 		}
 	}
@@ -228,21 +231,20 @@ func (fb *FrameBuffer) Triangle2(
 				u := (alpha*u0z0 + beta*u1z1 + gamma*u2z2) / zRec
 				v := (alpha*v0z0 + beta*v1z1 + gamma*v2z2) / zRec
 
-				// Sample texture and adjust color intensity
-				c := texture.Sample(u, v)
-				c = colorIntensity(c, intensity)
+				c := faceColor
+				if texture != nil {
+					c = texture.Sample(u, v)
+				}
 
-				// Draw the pixel
+				c = colorIntensity(c, intensity)
 				fb.Pixel(x, y, c, -zRec)
 			}
 
-			// Update edge function values for the next pixel in the row
 			fx01 += f01dx
 			fx12 += f12dx
 			fx20 += f20dx
 		}
 
-		// Update edge function values for the next row
 		f01 += f01dy
 		f12 += f12dy
 		f20 += f20dy
@@ -306,7 +308,12 @@ func (fb *FrameBuffer) Triangle3(
 				z := zStart + t*(zEnd-zStart)
 				u := uStart + t*(uEnd-uStart)
 				v := vStart + t*(vEnd-vStart)
-				c := texture.Sample(u, v)
+
+				c := faceColor
+				if texture != nil {
+					c = texture.Sample(u, v)
+				}
+
 				c = colorIntensity(c, intensity)
 				fb.Pixel(x, y, c, -z)
 			}
@@ -329,7 +336,12 @@ func (fb *FrameBuffer) Triangle3(
 				z := zStart + t*(zEnd-zStart)
 				u := uStart + t*(uEnd-uStart)
 				v := vStart + t*(vEnd-vStart)
-				c := texture.Sample(u, v)
+
+				c := faceColor
+				if texture != nil {
+					c = texture.Sample(u, v)
+				}
+
 				c = colorIntensity(c, intensity)
 				fb.Pixel(x, y, c, -z)
 			}

@@ -8,11 +8,11 @@ import (
 )
 
 const (
-	parallelRendering = true
-	maxTiles          = 16
+	maxTiles = 16
 )
 
 var (
+	faceColor   = color.RGBA{200, 200, 200, 255}
 	vertexColor = color.RGBA{255, 161, 0, 255}
 	edgeColor   = color.RGBA{0, 0, 0, 255}
 )
@@ -109,7 +109,7 @@ func NewRenderer(fb *FrameBuffer) *Renderer {
 	fovY := 45 * (math.Pi / 180)
 	fovX := 2 * math.Atan(math.Tan(fovY/2)*aspectX)
 
-	zNear, zFar := 0.0, 100.0
+	zNear, zFar := 0.0, 30.0
 	frustum := NewFrustum(zNear, zFar)
 
 	r := &Renderer{
@@ -131,7 +131,7 @@ func NewRenderer(fb *FrameBuffer) *Renderer {
 		toDraw:          make(chan rasterizationTask, maxTiles),
 	}
 
-	if parallelRendering {
+	if parallel {
 		r.numTiles = max(runtime.NumCPU(), maxTiles)
 
 		for i := 0; i < r.numTiles; i++ {
@@ -156,7 +156,7 @@ func (r *Renderer) drawProjection(t *Triangle) {
 	}
 
 	if r.ShowFaces {
-		r.fb.Triangle2(
+		r.fb.Triangle(
 			int(a.X), int(a.Y), a.W, uvA.U, uvA.V,
 			int(b.X), int(b.Y), b.W, uvB.U, uvB.V,
 			int(c.X), int(c.Y), c.W, uvC.U, uvC.V,
@@ -330,7 +330,7 @@ func (r *Renderer) projectObject(object *Object, camera *Camera) {
 			localBuf[localBufSize] = Triangle{
 				Points:      *newPoints,
 				UVs:         clipUVs[i],
-				Texture:     object.Texture,
+				Texture:     face.Texture,
 				Intensity:   lightIntensity,
 				TileNumbers: tileNumbers,
 			}
@@ -387,7 +387,7 @@ func (r *Renderer) Draw(objects []*Object, camera *Camera) {
 	r.fb.Clear(color.RGBA{50, 50, 50, 255})
 	r.fb.DotGrid(color.RGBA{100, 100, 100, 255}, 10)
 
-	if parallelRendering {
+	if parallel {
 		r.wg.Add(len(objects))
 		for i := range objects {
 			r.toProject <- projectionTask{

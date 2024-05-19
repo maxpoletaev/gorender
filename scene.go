@@ -96,9 +96,13 @@ func LoadSceneFile(filename string) (*Scene, error) {
 				texture.SetScale(meshData.TextureScale)
 			}
 
-			mesh.Texture = texture
+			for i := range mesh.Faces {
+				mesh.Faces[i].Texture = texture
+			}
 		} else {
-			mesh.Texture = defaultTexture
+			for i := range mesh.Faces {
+				mesh.Faces[i].Texture = defaultTexture
+			}
 		}
 
 		meshes[meshData.ID] = mesh
