@@ -16,7 +16,7 @@ const (
 	viewScale   = 2
 	viewWidth   = 800 / viewScale
 	viewHeight  = 600 / viewScale
-	frameRate   = 30
+	frameRate   = 60
 	windowTitle = "goxgl"
 )
 
@@ -163,7 +163,7 @@ func main() {
 		triggerDraw <- struct{}{}
 
 		forward := camera.Direction.Normalize()
-		forward.Y = 0 // Only move in the XZ plane
+		//forward.Y = 0 // Only move in the XZ plane
 		right := forward.CrossProduct(camera.Up).Normalize()
 
 		switch {
