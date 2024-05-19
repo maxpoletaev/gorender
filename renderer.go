@@ -239,7 +239,7 @@ func (r *Renderer) projectObject(object *Object, camera *Camera) {
 	}
 
 	var (
-		localBuf     [128]Triangle
+		localBuf     [16]Triangle
 		localBufSize int
 	)
 

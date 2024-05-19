@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"path"
+	"runtime"
 	"runtime/pprof"
 
 	rl "github.com/gen2brain/raylib-go/raylib"
@@ -31,12 +32,14 @@ func onOff(b bool) string {
 type options struct {
 	cpuProfile string
 	memProfile string
+	trace      string
 }
 
 func parseOptions() *options {
 	opts := &options{}
 	flag.StringVar(&opts.cpuProfile, "cpuprof", "", "write cpu profile to file")
 	flag.StringVar(&opts.memProfile, "memprof", "", "write memory profile to file")
+	flag.StringVar(&opts.trace, "trace", "", "write trace to file")
 	flag.Parse()
 	return opts
 }
@@ -83,6 +86,41 @@ func main() {
 		defer func() {
 			if err := pprof.WriteHeapProfile(f); err != nil {
 				log.Printf("[ERROR] failed to write memory profile: %s", err)
+			}
+		}()
+	}
+
+	if opts.trace != "" {
+		f, err := os.Create(opts.trace)
+		if err != nil {
+			log.Fatalf("failed to create trace file: %s", err)
+		}
+
+		defer func() {
+			_ = f.Close()
+		}()
+
+		if err := runtime.StartTrace(); err != nil {
+			log.Fatalf("failed to start trace: %s", err)
+		}
+
+		defer func() {
+			log.Printf("[INFO] stopping trace")
+			runtime.StopTrace()
+
+			log.Printf("[INFO] trace stopped")
+		}()
+
+		go func() {
+			for {
+				data := runtime.ReadTrace()
+				if data == nil {
+					break
+				}
+
+				if _, err := f.Write(data); err != nil {
+					log.Printf("[ERROR] failed to write trace: %s", err)
+				}
 			}
 		}()
 	}
