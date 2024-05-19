@@ -203,22 +203,26 @@ func (r *Renderer) renderTile(tileID int) {
 	}
 }
 
-func (r *Renderer) IsTriangleCrossingTile(points *[3]Vec4, tile int) bool {
+func (r *Renderer) IsTriangleInTile(points *[3]Vec4, tile int) bool {
 	var (
 		start = r.tileBoundaries[tile][0]
 		end   = r.tileBoundaries[tile][1]
 	)
 
-	for i := range points {
-		if points[i].X >= start.X &&
-			points[i].X <= end.X &&
-			points[i].Y >= start.Y &&
-			points[i].Y <= end.Y {
-			return true
-		}
+	var (
+		// Triangle bounding box
+		minX = min(points[0].X, points[1].X, points[2].X)
+		maxX = max(points[0].X, points[1].X, points[2].X)
+		minY = min(points[0].Y, points[1].Y, points[2].Y)
+		maxY = max(points[0].Y, points[1].Y, points[2].Y)
+	)
+
+	if maxX < start.X || minX > end.X ||
+		maxY < start.Y || minY > end.Y {
+		return false
 	}
 
-	return false
+	return true
 }
 
 func (r *Renderer) projectObject(object *Object, camera *Camera) {
@@ -313,20 +317,22 @@ func (r *Renderer) projectObject(object *Object, camera *Camera) {
 				newPoints[j] = v
 			}
 
+			// Precompute which tiles the triangle should be rendered to
+			var tileNumbers uint16
+			for t := 0; t < r.numTiles; t++ {
+				if r.IsTriangleInTile(newPoints, t) {
+					tileNumbers |= 1 << t
+				}
+			}
+
 			// Keep the triangle in the local buffer to avoid tacking
 			// the global mutex too often
 			localBuf[localBufSize] = Triangle{
-				Points:    *newPoints,
-				UVs:       clipUVs[i],
-				Texture:   object.Texture,
-				Intensity: lightIntensity,
-			}
-
-			for t := 0; t < r.numTiles; t++ {
-				// Precompute which tiles the triangle should be rendered to
-				if r.IsTriangleCrossingTile(newPoints, t) {
-					localBuf[localBufSize].TileNumbers |= 1 << t
-				}
+				Points:      *newPoints,
+				UVs:         clipUVs[i],
+				Texture:     object.Texture,
+				Intensity:   lightIntensity,
+				TileNumbers: tileNumbers,
 			}
 
 			// Flush the buffer once it's full
