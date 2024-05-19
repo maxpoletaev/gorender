@@ -52,6 +52,10 @@ type Plane struct {
 	Normal Vec4
 }
 
+func (p *Plane) DistanceToVertex(v Vec4) float64 {
+	return p.Normal.DotProduct(v) - p.Normal.DotProduct(p.Point)
+}
+
 // IsVertexInside tells if a point is inside or outside the plane.
 func (p *Plane) IsVertexInside(q Vec4) bool {
 	return q.Sub(p.Point).DotProduct(p.Normal) <= 0
@@ -100,6 +104,25 @@ func NewFrustum(zNear, zFar float64) *Frustum {
 			},
 		},
 	}
+}
+
+func (f *Frustum) IsBoxVisible(bbox [8]Vec4) bool {
+	for i := range f.Planes {
+		outside := 0
+
+		for _, point := range bbox {
+			if f.Planes[i].DistanceToVertex(point) > 0 {
+				outside++
+			}
+		}
+
+		if outside == len(bbox) {
+			return false
+		}
+
+	}
+
+	return true
 }
 
 func interpolateUV(a, b UV, factor float64) UV {

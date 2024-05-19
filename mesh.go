@@ -17,16 +17,43 @@ type Face struct {
 }
 
 type Mesh struct {
-	Name     string
-	Vertices []Vec3
-	Faces    []Face
-	Texture  *Texture
+	Name        string
+	Vertices    []Vec3
+	Faces       []Face
+	Texture     *Texture
+	BoundingBox [8]Vec4
+}
+
+func boundingBox(vertices []Vec3) [8]Vec4 {
+	minX, minY, minZ := vertices[0].X, vertices[0].Y, vertices[0].Z
+	maxX, maxY, maxZ := minX, minY, minZ
+
+	for _, v := range vertices {
+		minX = min(minX, v.X)
+		minY = min(minY, v.Y)
+		minZ = min(minZ, v.Z)
+		maxX = max(maxX, v.X)
+		maxY = max(maxY, v.Y)
+		maxZ = max(maxZ, v.Z)
+	}
+
+	return [8]Vec4{
+		{minX, minY, minZ, 1},
+		{minX, minY, maxZ, 1},
+		{minX, maxY, minZ, 1},
+		{minX, maxY, maxZ, 1},
+		{maxX, minY, minZ, 1},
+		{maxX, minY, maxZ, 1},
+		{maxX, maxY, minZ, 1},
+		{maxX, maxY, maxZ, 1},
+	}
 }
 
 func NewMesh(vertices []Vec3, faces []Face) *Mesh {
 	return &Mesh{
-		Vertices: vertices,
-		Faces:    faces,
+		Faces:       faces,
+		Vertices:    vertices,
+		BoundingBox: boundingBox(vertices),
 		Texture: &Texture{
 			color: color.RGBA{255, 255, 255, 255},
 		},

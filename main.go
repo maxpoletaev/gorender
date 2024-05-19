@@ -6,15 +6,17 @@ import (
 	_ "image/png"
 	"log"
 	"os"
+	"path"
 	"runtime/pprof"
 
 	rl "github.com/gen2brain/raylib-go/raylib"
 )
 
 const (
-	viewScale   = 1
-	viewWidth   = 1280 / viewScale
-	viewHeight  = 1024 / viewScale
+	viewScale   = 2
+	viewWidth   = 800 / viewScale
+	viewHeight  = 600 / viewScale
+	frameRate   = 30
 	windowTitle = "goxgl"
 )
 
@@ -87,10 +89,29 @@ func main() {
 
 	fb := NewFrameBuffer(viewWidth, viewHeight)
 	renderer := NewRenderer(fb)
+	filename := flag.Arg(0)
 
-	scene, err := LoadSceneFile(flag.Arg(0))
-	if err != nil {
-		log.Fatalf("failed to load scene file: %s", err)
+	var (
+		scene *Scene
+		err   error
+	)
+
+	switch path.Ext(filename) {
+	case ".obj":
+		mesh, err := LoadMeshFile(filename)
+		if err != nil {
+			log.Fatalf("failed to load mesh file: %s", err)
+		}
+
+		object := NewObject(mesh)
+		scene = &Scene{Objects: []*Object{object}}
+	case ".json":
+		scene, err = LoadSceneFile(filename)
+		if err != nil {
+			log.Fatalf("failed to load scene file: %s", err)
+		}
+	default:
+		log.Fatalf("unsupported file format: %s", path.Ext(filename))
 	}
 
 	var (
@@ -105,7 +126,7 @@ func main() {
 	rl.InitWindow(windowWidth, windowHeight, windowTitle)
 	defer rl.CloseWindow()
 
-	rl.SetTargetFPS(60)
+	rl.SetTargetFPS(frameRate)
 
 	renderTexture := rl.LoadRenderTexture(int32(fb.Width), int32(fb.Height))
 	defer rl.UnloadRenderTexture(renderTexture)
@@ -116,8 +137,8 @@ func main() {
 	)
 
 	camera := &Camera{
-		Direction: Vec3{0, 0, -1},
-		Position:  Vec3{0, 1, 10},
+		Direction: Vec3{0, 0, 1},
+		Position:  Vec3{10, 5, -2},
 		Up:        Vec3{0, 1, 0},
 	}
 
@@ -127,7 +148,7 @@ func main() {
 	go func() {
 		for {
 			<-triggerDraw
-			cameraCopy := *camera
+			cameraCopy := *camera // to prevent updating camera mid-frame
 			renderer.Draw(scene.Objects, &cameraCopy)
 			frameReady <- struct{}{}
 		}
@@ -202,9 +223,9 @@ func main() {
 		rl.BeginDrawing()
 		rl.DrawTexturePro(
 			renderTexture.Texture,
-			rl.Rectangle{0, 0, float32(fb.Width), float32(fb.Height)},
-			rl.Rectangle{0, 0, float32(fb.Width * viewScale), float32(fb.Height * viewScale)},
-			rl.Vector2{0, 0},
+			rl.NewRectangle(0, 0, float32(fb.Width), float32(fb.Height)),
+			rl.NewRectangle(0, 0, float32(fb.Width*viewScale), float32(fb.Height*viewScale)),
+			rl.NewVector2(0, 0),
 			0,
 			rl.White,
 		)
@@ -238,10 +259,13 @@ func main() {
 			5,
 			windowHeight-35,
 			fmt.Sprintf(
-				"Camera X=%.2f Y=%.2f Z=%.2f",
+				"X=%.2f Y=%.2f Z=%.2f RX=%.2f RY=%.2f RZ=%.2f",
 				camera.Position.X,
 				camera.Position.Y,
 				camera.Position.Z,
+				camera.Direction.X,
+				camera.Direction.Y,
+				camera.Direction.Z,
 			),
 		)
 

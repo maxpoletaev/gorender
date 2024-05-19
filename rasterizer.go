@@ -74,7 +74,7 @@ func (fb *FrameBuffer) Line(x0, y0 int, x1, y1 int, c color.RGBA) {
 	curX, curY := float64(x0), float64(y0)
 
 	for i := 0; i <= sideLength; i++ {
-		fb.Pixel(int(curX), int(curY), c, 1.0)
+		fb.Pixel(int(curX), int(curY), c, 100)
 		curX += xStep
 		curY += yStep
 	}
@@ -129,6 +129,7 @@ func (fb *FrameBuffer) Triangle(
 		betaRow := float64(f3*(minX-x2)+f4*(y-y2)) * areaRec
 
 		for x := minX; x <= maxX; x++ {
+			// Compute barycentric coordinates for x, y
 			alpha := alphaRow + alphaDx*float64(x-minX)
 			beta := betaRow + betaDx*float64(x-minX)
 			gamma := 1 - alpha - beta
@@ -155,6 +156,187 @@ func (fb *FrameBuffer) Triangle(
 	}
 }
 
+func (fb *FrameBuffer) Triangle2(
+	x0, y0 int, z0 float64, u0, v0 float64,
+	x1, y1 int, z1 float64, u1, v1 float64,
+	x2, y2 int, z2 float64, u2, v2 float64,
+	texture *Texture,
+	intensity float64,
+) {
+	// Find the bounding box of the triangle
+	minX, maxX := min(x0, x1, x2), max(x0, x1, x2)
+	minY, maxY := min(y0, y1, y2), max(y0, y1, y2)
+
+	// Ensure the intensity is in the range [0.2, 1.0]
+	intensity = max(0.2, min(intensity, 1.0))
+
+	// Precalculate edge function values for the triangle's edges
+	edge01 := func(x, y int) int { return (y0-y1)*x + (x1-x0)*y + (x0*y1 - x1*y0) }
+	edge12 := func(x, y int) int { return (y1-y2)*x + (x2-x1)*y + (x1*y2 - x2*y1) }
+	edge20 := func(x, y int) int { return (y2-y0)*x + (x0-x2)*y + (x2*y0 - x0*y2) }
+
+	// Calculate initial edge function values for the first pixel in the bounding box
+	f01 := edge01(minX, minY)
+	f12 := edge12(minX, minY)
+	f20 := edge20(minX, minY)
+
+	// Calculate the change in the edge function values when moving one pixel to the right and down
+	f01dx := y0 - y1
+	f01dy := x1 - x0
+	f12dx := y1 - y2
+	f12dy := x2 - x1
+	f20dx := y2 - y0
+	f20dy := x0 - x2
+
+	// Apply top-left rule adjustment for the edge functions
+	edgeAdjust := func(f, dx, dy int) int {
+		if dy > 0 || (dy == 0 && dx > 0) {
+			return f
+		}
+		return f - 1
+	}
+
+	// Adjust the initial edge function values based on the top-left rule
+	f01 = edgeAdjust(f01, f01dx, f01dy)
+	f12 = edgeAdjust(f12, f12dx, f12dy)
+	f20 = edgeAdjust(f20, f20dx, f20dy)
+
+	// Precalculate factors for uv interpolation
+	v0z0 := v0 / z0
+	u0z0 := u0 / z0
+	u1z1 := u1 / z1
+	v1z1 := v1 / z1
+	u2z2 := u2 / z2
+	v2z2 := v2 / z2
+
+	// Iterate through the bounding box
+	for y := minY; y <= maxY; y++ {
+		fx01 := f01
+		fx12 := f12
+		fx20 := f20
+
+		for x := minX; x <= maxX; x++ {
+			// Check if the point is inside the triangle using the edge function values
+			if fx01 < 0 && fx12 < 0 && fx20 < 0 {
+				// Compute barycentric coordinates for x, y
+				alpha := float64(fx12) / float64(fx12+fx20+fx01)
+				beta := float64(fx20) / float64(fx12+fx20+fx01)
+				gamma := 1 - alpha - beta
+
+				// Interpolate depth and texture coordinates
+				zRec := alpha/z0 + beta/z1 + gamma/z2
+				u := (alpha*u0z0 + beta*u1z1 + gamma*u2z2) / zRec
+				v := (alpha*v0z0 + beta*v1z1 + gamma*v2z2) / zRec
+
+				// Sample texture and adjust color intensity
+				c := texture.Sample(u, v)
+				c = colorIntensity(c, intensity)
+
+				// Draw the pixel
+				fb.Pixel(x, y, c, -zRec)
+			}
+
+			// Update edge function values for the next pixel in the row
+			fx01 += f01dx
+			fx12 += f12dx
+			fx20 += f20dx
+		}
+
+		// Update edge function values for the next row
+		f01 += f01dy
+		f12 += f12dy
+		f20 += f20dy
+	}
+}
+
+func interpolate(
+	y, y0, y1 int,
+	x0, x1 int,
+	z0rec, z1rec float64,
+	u0, u1, v0, v1 float64,
+) (int, float64, float64, float64) {
+	t := float64(y-y0) / float64(y1-y0)
+	x := int(float64(x0) + t*float64(x1-x0))
+	z := z0rec + t*(z1rec-z0rec)
+	u := u0 + t*(u1-u0)
+	v := v0 + t*(v1-v0)
+	return x, z, u, v
+}
+
+func (fb *FrameBuffer) Triangle3(
+	x0, y0 int, z0 float64, u0, v0 float64,
+	x1, y1 int, z1 float64, u1, v1 float64,
+	x2, y2 int, z2 float64, u2, v2 float64,
+	texture *Texture,
+	intensity float64,
+) {
+	// Sort vertices by y-coordinate
+	if y0 > y1 {
+		x0, y0, z0, x1, y1, z1 = x1, y1, z1, x0, y0, z0
+		u0, v0, u1, v1 = u1, v1, u0, v0
+	}
+	if y0 > y2 {
+		x0, y0, z0, x2, y2, z2 = x2, y2, z2, x0, y0, z0
+		u0, v0, u2, v2 = u2, v2, u0, v0
+	}
+	if y1 > y2 {
+		x1, y1, z1, x2, y2, z2 = x2, y2, z2, x1, y1, z1
+		u1, v1, u2, v2 = u2, v2, u1, v1
+	}
+
+	// Ensure the intensity is in the range [0.2, 1.0]
+	intensity = max(0.2, min(intensity, 1.0))
+
+	// Calculate reciprocals for depth and texture mapping
+	z0rec, z1rec, z2rec := 1/z0, 1/z1, 1/z2
+
+	// Draw scanlines from y0 to y1 (top half of the triangle)
+	if y1 > y0 {
+		for y := y0; y <= y1; y++ {
+			xStart, zStart, uStart, vStart := interpolate(y, y0, y1, x0, x1, z0rec, z1rec, u0, u1, v0, v1)
+			xEnd, zEnd, uEnd, vEnd := interpolate(y, y0, y2, x0, x2, z0rec, z2rec, u0, u2, v0, v2)
+
+			if xStart > xEnd {
+				xStart, xEnd, zStart, zEnd = xEnd, xStart, zEnd, zStart
+				uStart, uEnd, vStart, vEnd = uEnd, uStart, vEnd, vStart
+			}
+
+			for x := xStart; x <= xEnd; x++ {
+				t := float64(x-xStart) / float64(xEnd-xStart)
+				z := zStart + t*(zEnd-zStart)
+				u := uStart + t*(uEnd-uStart)
+				v := vStart + t*(vEnd-vStart)
+				c := texture.Sample(u, v)
+				c = colorIntensity(c, intensity)
+				fb.Pixel(x, y, c, -z)
+			}
+		}
+	}
+
+	// Draw scanlines from y1 to y2 (bottom half of the triangle)
+	if y2 > y1 {
+		for y := y1; y <= y2; y++ {
+			xStart, zStart, uStart, vStart := interpolate(y, y1, y2, x1, x2, z1rec, z2rec, u1, u2, v1, v2)
+			xEnd, zEnd, uEnd, vEnd := interpolate(y, y0, y2, x0, x2, z0rec, z2rec, u0, u2, v0, v2)
+
+			if xStart > xEnd {
+				xStart, xEnd, zStart, zEnd = xEnd, xStart, zEnd, zStart
+				uStart, uEnd, vStart, vEnd = uEnd, uStart, vEnd, vStart
+			}
+
+			for x := xStart; x <= xEnd; x++ {
+				t := float64(x-xStart) / float64(xEnd-xStart)
+				z := zStart + t*(zEnd-zStart)
+				u := uStart + t*(uEnd-uStart)
+				v := vStart + t*(vEnd-vStart)
+				c := texture.Sample(u, v)
+				c = colorIntensity(c, intensity)
+				fb.Pixel(x, y, c, -z)
+			}
+		}
+	}
+}
+
 func blendRGBA(a, b color.RGBA, f float64) color.RGBA {
 	cr := uint8(float64(a.R)*(1-f) + float64(b.R)*f)
 	cg := uint8(float64(a.G)*(1-f) + float64(b.G)*f)
@@ -172,10 +354,19 @@ func (fb *FrameBuffer) Fog(fogStart, fogEnd float64, c color.RGBA) {
 			// noop
 		case depth <= fogEnd:
 			fb.Pixels[i] = c
-
 		default:
 			f := 1 - ((fogEnd - depth) / (fogEnd - fogStart))
 			fb.Pixels[i] = blendRGBA(fb.Pixels[i], c, f)
 		}
 	}
+}
+
+func (fb *FrameBuffer) CrossHair(c color.RGBA) {
+	const size, offset = 5, 3
+	x, y := fb.Width/2, fb.Height/2
+
+	fb.Line(x-size, y, x-offset, y, c)
+	fb.Line(x+offset, y, x+size, y, c)
+	fb.Line(x, y-size, x, y-offset, c)
+	fb.Line(x, y+offset, x, y+size, c)
 }

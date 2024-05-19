@@ -7,6 +7,10 @@ import (
 	"sync"
 )
 
+const (
+	parallelRendering = true
+)
+
 var (
 	vertexColor = color.RGBA{255, 161, 0, 255}
 	edgeColor   = color.RGBA{0, 0, 0, 255}
@@ -31,16 +35,20 @@ type DebugInfo struct {
 	Text string
 }
 
+type RenderTask struct {
+	Object *Object
+	Camera *Camera
+}
+
 type Renderer struct {
 	fb               *FrameBuffer
-	projections      []Projection
 	frustum          *Frustum
 	aspectX, aspectY float64
 	zNear, zFar      float64
 	fovX, fovY       float64
 
-	wg          sync.WaitGroup
-	toRasterize chan *Projection
+	wg    sync.WaitGroup
+	tasks chan RenderTask
 
 	FrustumClipping bool
 	ShowVertices    bool
@@ -61,7 +69,7 @@ func NewRenderer(fb *FrameBuffer) *Renderer {
 	fovY := 45 * (math.Pi / 180)
 	fovX := 2 * math.Atan(math.Tan(fovY/2)*aspectX)
 
-	zNear, zFar := 0.0, 50.0
+	zNear, zFar := 0.0, 100.0
 	frustum := NewFrustum(zNear, zFar)
 
 	r := &Renderer{
@@ -78,29 +86,86 @@ func NewRenderer(fb *FrameBuffer) *Renderer {
 		frustum:         frustum,
 		zNear:           zNear,
 		zFar:            zFar,
-		toRasterize:     make(chan *Projection),
+		tasks:           make(chan RenderTask),
 	}
 
-	for i := 0; i < runtime.NumCPU(); i++ {
-		go r.startWorker()
+	if parallelRendering {
+		for i := 0; i < runtime.NumCPU(); i++ {
+			go r.startWorker()
+		}
 	}
 
 	return r
 }
 
-func (r *Renderer) project(object *Object, camera *Camera) {
-	r.projections = r.projections[:0]
-	r.DebugInfo = r.DebugInfo[:0]
+func (r *Renderer) drawProjection(t *Projection) {
+	a, b, c := t.Points[0], t.Points[1], t.Points[2]
+	uvA, uvB, uvC := t.UVs[0], t.UVs[1], t.UVs[2]
 
+	center := Vec2{
+		X: (a.X + b.X + c.X) / 3,
+		Y: (a.Y + b.Y + c.Y) / 3,
+	}
+
+	if !r.ShowTextures {
+		t.Texture = nil
+	}
+
+	if r.ShowFaces {
+		r.fb.Triangle2(
+			int(a.X), int(a.Y), a.W, uvA.U, uvA.V,
+			int(b.X), int(b.Y), b.W, uvB.U, uvB.V,
+			int(c.X), int(c.Y), c.W, uvC.U, uvC.V,
+			t.Texture,
+			t.Intensity,
+		)
+	}
+
+	if r.ShowEdges {
+		ec := edgeColor
+		if !r.ShowFaces {
+			// Black edges are not visible when faces are not drawn
+			ec = color.RGBA{255, 255, 255, 255}
+		}
+
+		r.fb.Line(int(a.X), int(a.Y), int(b.X), int(b.Y), ec)
+		r.fb.Line(int(b.X), int(b.Y), int(c.X), int(c.Y), ec)
+		r.fb.Line(int(c.X), int(c.Y), int(a.X), int(a.Y), ec)
+
+		if r.ShowFaces {
+			r.fb.Rect(int(center.X)-1, int(center.Y)-1, 3, 3, ec)
+		}
+	}
+
+	if r.ShowVertices {
+		r.fb.Rect(int(a.X)-1, int(a.Y)-1, 3, 3, vertexColor)
+		r.fb.Rect(int(b.X)-1, int(b.Y)-1, 3, 3, vertexColor)
+		r.fb.Rect(int(c.X)-1, int(c.Y)-1, 3, 3, vertexColor)
+	}
+}
+
+func (r *Renderer) renderObject(object *Object, camera *Camera) {
 	worldMatrix := NewWorldMatrix(object.Scale, object.Rotation, object.Translation)
 	viewMatrix := NewViewMatrix(camera.Position, camera.Direction, camera.Up)
 	perspectiveMatrix := NewPerspectiveMatrix(r.fovY, r.aspectX, r.zNear, r.zFar)
 	screenMatrix := NewScreenMatrix(r.fb.Width, r.fb.Height)
 	lightDirection := Vec3{Y: 0.5, Z: -1}.Normalize()
+	bbox := object.BoundingBox
+
+	// Apply transformations to the bounding box
+	for i := 0; i < 8; i++ {
+		bbox[i] = worldMatrix.MultiplyVec4(bbox[i])
+		bbox[i] = viewMatrix.MultiplyVec4(bbox[i])
+		bbox[i] = perspectiveMatrix.MultiplyVec4(bbox[i])
+	}
+
+	// Quick check if the object is inside the frustum
+	if !r.frustum.IsBoxVisible(bbox) {
+		return
+	}
 
 	for fi := range object.Faces {
 		face := &object.Faces[fi]
-		faceVisible := false
 
 		points := [3]Vec4{
 			object.Vertices[face.A].ToVec4(),
@@ -112,15 +177,6 @@ func (r *Renderer) project(object *Object, camera *Camera) {
 			points[p] = worldMatrix.MultiplyVec4(points[p])       // Local -> World space
 			points[p] = viewMatrix.MultiplyVec4(points[p])        // World -> View space
 			points[p] = perspectiveMatrix.MultiplyVec4(points[p]) // View -> Clip space
-
-			// Check if the face is not behind the camera
-			if r.frustum.Planes[PlaneNear].IsVertexInside(points[p]) {
-				faceVisible = true
-			}
-		}
-
-		if !faceVisible {
-			continue
 		}
 
 		a, b, c := points[0].ToVec3(), points[1].ToVec3(), points[2].ToVec3()
@@ -133,9 +189,18 @@ func (r *Renderer) project(object *Object, camera *Camera) {
 			}
 		}
 
-		lightIntensity := 0.5
+		var (
+			lightIntensity = 0.5
+		)
+
 		if r.Lighting {
-			lightIntensity = faceNormal.DotProduct(lightDirection) * 0.95
+			const (
+				ambientStrength = 0.5
+				diffuseStrength = 0.5
+			)
+
+			diffuse := math.Max(faceNormal.DotProduct(lightDirection), 0.0) * diffuseStrength
+			lightIntensity = ambientStrength + diffuse
 		}
 
 		var (
@@ -145,6 +210,7 @@ func (r *Renderer) project(object *Object, camera *Camera) {
 			clipCount  int
 		)
 
+		// TODO: check if clipping is needed (all points are inside)
 		if r.FrustumClipping {
 			uvs := [3]UV{face.UVa, face.UVb, face.UVc}
 			clipCount = r.frustum.ClipTriangle(points, uvs, &clipPoints, &clipUVs)
@@ -165,7 +231,7 @@ func (r *Renderer) project(object *Object, camera *Camera) {
 				newPoints[j] = v
 			}
 
-			r.projections = append(r.projections, Projection{
+			r.drawProjection(&Projection{
 				Points:    newPoints,
 				Texture:   object.Texture,
 				Intensity: lightIntensity,
@@ -176,80 +242,9 @@ func (r *Renderer) project(object *Object, camera *Camera) {
 }
 
 func (r *Renderer) startWorker() {
-	for {
-		t := <-r.toRasterize
-		a, b, c := t.Points[0], t.Points[1], t.Points[2]
-		uvA, uvB, uvC := t.UVs[0], t.UVs[1], t.UVs[2]
-
-		r.fb.Triangle(
-			int(a.X), int(a.Y), a.W, uvA.U, uvA.V,
-			int(b.X), int(b.Y), b.W, uvB.U, uvB.V,
-			int(c.X), int(c.Y), c.W, uvC.U, uvC.V,
-			t.Texture,
-			t.Intensity,
-		)
-
+	for task := range r.tasks {
+		r.renderObject(task.Object, task.Camera)
 		r.wg.Done()
-	}
-}
-
-func (r *Renderer) rasterizeParallel() {
-	r.wg.Add(len(r.projections))
-
-	for i := range r.projections {
-		r.toRasterize <- &r.projections[i]
-	}
-
-	r.wg.Wait()
-}
-
-func (r *Renderer) rasterize() {
-	// Draw triangles to the frame buffer
-	for i := range r.projections {
-		t := &r.projections[i]
-		a, b, c := t.Points[0], t.Points[1], t.Points[2]
-		uvA, uvB, uvC := t.UVs[0], t.UVs[1], t.UVs[2]
-
-		center := Vec2{
-			X: (a.X + b.X + c.X) / 3,
-			Y: (a.Y + b.Y + c.Y) / 3,
-		}
-
-		if !r.ShowTextures {
-			t.Texture = nil
-		}
-
-		if r.ShowFaces {
-			r.fb.Triangle(
-				int(a.X), int(a.Y), a.W, uvA.U, uvA.V,
-				int(b.X), int(b.Y), b.W, uvB.U, uvB.V,
-				int(c.X), int(c.Y), c.W, uvC.U, uvC.V,
-				t.Texture,
-				t.Intensity,
-			)
-		}
-
-		if r.ShowEdges {
-			ec := edgeColor
-			if !r.ShowFaces {
-				// Black edges are not visible when faces are not drawn
-				ec = color.RGBA{255, 255, 255, 255}
-			}
-
-			r.fb.Line(int(a.X), int(a.Y), int(b.X), int(b.Y), ec)
-			r.fb.Line(int(b.X), int(b.Y), int(c.X), int(c.Y), ec)
-			r.fb.Line(int(c.X), int(c.Y), int(a.X), int(a.Y), ec)
-
-			if r.ShowFaces {
-				r.fb.Rect(int(center.X)-1, int(center.Y)-1, 3, 3, ec)
-			}
-		}
-
-		if r.ShowVertices {
-			r.fb.Rect(int(a.X)-1, int(a.Y)-1, 3, 3, vertexColor)
-			r.fb.Rect(int(b.X)-1, int(b.Y)-1, 3, 3, vertexColor)
-			r.fb.Rect(int(c.X)-1, int(c.Y)-1, 3, 3, vertexColor)
-		}
 	}
 }
 
@@ -257,10 +252,23 @@ func (r *Renderer) Draw(objects []*Object, camera *Camera) {
 	r.fb.Clear(color.RGBA{50, 50, 50, 255})
 	r.fb.DotGrid(color.RGBA{100, 100, 100, 255}, 10)
 
-	for i := range objects {
-		r.project(objects[i], camera)
-		r.rasterizeParallel()
+	if parallelRendering {
+		r.wg.Add(len(objects))
+
+		for i := range objects {
+			r.tasks <- RenderTask{
+				Object: objects[i],
+				Camera: camera,
+			}
+		}
+
+		r.wg.Wait()
+	} else {
+		for i := range objects {
+			r.renderObject(objects[i], camera)
+		}
 	}
 
-	r.fb.Fog(0.100, 0.033, color.RGBA{255, 255, 255, 255})
+	r.fb.CrossHair(color.RGBA{255, 255, 0, 255})
+	//r.fb.Fog(0.100, 0.033, color.RGBA{100, 100, 100, 255})
 }
