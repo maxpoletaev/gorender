@@ -133,8 +133,7 @@ func interpolateUV(a, b UV, factor float64) UV {
 }
 
 func (f *Frustum) ClipTriangle(
-	pointsIn [3]Vec4,
-	uvsIn [3]UV,
+	pointsIn *[3]Vec4, uvsIn *[3]UV,
 	pointsOut *[maxClipPoints][3]Vec4,
 	uvsOut *[maxClipPoints][3]UV,
 ) (numOut int) {
@@ -187,6 +186,6 @@ func (f *Frustum) ClipTriangle(
 		polygon = newPolygon
 	}
 
-	// Convert the polygon back to triangles
+	// Convert the polygon back to tileTriangles
 	return polygon.Triangulate(pointsOut, uvsOut)
 }

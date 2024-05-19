@@ -4,14 +4,23 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
-	"io"
+	"image/color"
+	"log"
+	"os"
+	"path"
 	"strings"
 )
+
+type ObjMaterial struct {
+	Name  string
+	MapKd string
+}
 
 type ObjContext struct {
 	Vertices        []Vec3
 	Faces           []Face
 	TextureVertices []UV
+	Textures        map[string]*Texture
 }
 
 func parseVertex(line string) (Vec3, error) {
@@ -84,11 +93,19 @@ func parseFace(c *ObjContext, line string) (Face, error) {
 	return face, err
 }
 
-// ReadObj reads a mesh from an .obj file.
-// Format description: https://people.computing.clemson.edu/~dhouse/courses/405/docs/brief-obj-file-format.html
-func ReadObj(reader io.Reader) (*Mesh, error) {
-	scanner := bufio.NewScanner(reader)
-	c := &ObjContext{}
+func parseMtlLibFile(filename string) ([]ObjMaterial, error) {
+	file, err := os.Open(filename)
+	if err != nil {
+		return nil, err
+	}
+
+	defer func() {
+		_ = file.Close()
+	}()
+
+	scanner := bufio.NewScanner(file)
+	var materials []ObjMaterial
+	var mat *ObjMaterial
 
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -97,6 +114,81 @@ func ReadObj(reader io.Reader) (*Mesh, error) {
 		}
 
 		switch {
+		case strings.HasPrefix(line, "newmtl "):
+			if mat != nil {
+				materials = append(materials, *mat)
+			}
+			name := strings.TrimPrefix(line, "newmtl ")
+			mat = &ObjMaterial{Name: name}
+		case strings.HasPrefix(line, "map_Kd "):
+			mapKd := strings.TrimPrefix(line, "map_Kd ")
+			mat.MapKd = mapKd
+		}
+	}
+
+	if mat != nil {
+		materials = append(materials, *mat)
+	}
+
+	return materials, nil
+}
+
+// LoadObjFile reads a mesh from an .obj file.
+// Format description: https://people.computing.clemson.edu/~dhouse/courses/405/docs/brief-obj-file-format.html
+func LoadObjFile(filename string) (*Mesh, error) {
+	file, err := os.Open(filename)
+	if err != nil {
+		return nil, err
+	}
+
+	defer func() {
+		_ = file.Close()
+	}()
+
+	dirname := path.Dir(filename)
+	scanner := bufio.NewScanner(file)
+	defaultTexture := &Texture{color: color.RGBA{255, 0, 255, 255}}
+	var currentTexture *Texture
+
+	c := &ObjContext{Textures: make(map[string]*Texture)}
+	textureFiles := make(map[string]*Texture)
+
+	for scanner.Scan() {
+		line := scanner.Text()
+		if len(line) == 0 {
+			continue
+		}
+
+		switch {
+		case strings.HasPrefix(line, "mtllib "):
+			mtlLibFile := strings.TrimPrefix(line, "mtllib ")
+			log.Printf("[INFO] found mtllib file: %s", mtlLibFile)
+
+			materials, err := parseMtlLibFile(path.Join(dirname, mtlLibFile))
+			if err != nil {
+				return nil, fmt.Errorf("failed to parse material library: %s", err)
+			}
+
+			for _, m := range materials {
+				if m.MapKd == "" {
+					log.Printf("[INFO] using default texture for material: %s", m.Name)
+					c.Textures[m.Name] = defaultTexture
+				} else {
+					if texture, ok := textureFiles[m.MapKd]; ok {
+						c.Textures[m.Name] = texture
+					} else {
+						log.Printf("[INFO] loading texture: %s", m.MapKd)
+						texture, err = LoadTextureFile(path.Join(dirname, m.MapKd))
+						if err != nil {
+							return nil, fmt.Errorf("failed to load texture: %s", err)
+						}
+
+						textureFiles[m.MapKd] = texture
+						c.Textures[m.Name] = texture
+					}
+				}
+			}
+
 		case strings.HasPrefix(line, "v "):
 			v, err := parseVertex(line)
 			if err != nil {
@@ -111,11 +203,16 @@ func ReadObj(reader io.Reader) (*Mesh, error) {
 			}
 			c.TextureVertices = append(c.TextureVertices, vt)
 
+		case strings.HasPrefix(line, "usemtl "):
+			mtlName := strings.TrimPrefix(line, "usemtl ")
+			currentTexture = c.Textures[mtlName]
+
 		case strings.HasPrefix(line, "f "):
 			f, err := parseFace(c, line)
 			if err != nil {
 				return nil, err
 			}
+			f.Texture = currentTexture
 			c.Faces = append(c.Faces, f)
 		}
 	}

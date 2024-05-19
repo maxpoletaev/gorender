@@ -2,8 +2,6 @@ package main
 
 import (
 	"fmt"
-	"image/color"
-	"os"
 	"path"
 )
 
@@ -14,13 +12,13 @@ type UV struct {
 type Face struct {
 	A, B, C       int // Vertex indices
 	UVa, UVb, UVc UV  // Texture coordinates
+	Texture       *Texture
 }
 
 type Mesh struct {
 	Name        string
 	Vertices    []Vec3
 	Faces       []Face
-	Texture     *Texture
 	BoundingBox [8]Vec4
 }
 
@@ -54,9 +52,6 @@ func NewMesh(vertices []Vec3, faces []Face) *Mesh {
 		Faces:       faces,
 		Vertices:    vertices,
 		BoundingBox: boundingBox(vertices),
-		Texture: &Texture{
-			color: color.RGBA{255, 255, 255, 255},
-		},
 	}
 }
 
@@ -75,20 +70,14 @@ func NewObject(mesh *Mesh) *Object {
 }
 
 func LoadMeshFile(filename string) (*Mesh, error) {
-	file, err := os.Open(filename)
-	if err != nil {
-		return nil, err
-	}
-
-	defer func() {
-		_ = file.Close()
-	}()
-
-	var mesh *Mesh
+	var (
+		mesh *Mesh
+		err  error
+	)
 
 	switch ext := path.Ext(filename); ext {
 	case ".obj":
-		mesh, err = ReadObj(file)
+		mesh, err = LoadObjFile(filename)
 		if err != nil {
 			return nil, err
 		}

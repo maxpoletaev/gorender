@@ -1,7 +1,6 @@
 package main
 
 import (
-	"errors"
 	"image"
 	"image/color"
 	"os"
@@ -12,6 +11,7 @@ type TextureType int
 const (
 	TextureTypeSolidColor TextureType = iota
 	TextureTypeImage
+	TextureTypeImageFast
 )
 
 type Texture struct {
@@ -35,8 +35,9 @@ func NewImageTexture(img image.Image) (*Texture, error) {
 	width := bounds.Dx()
 	height := bounds.Dy()
 
-	if !isPowerOfTwo(width) || !isPowerOfTwo(height) {
-		return nil, errors.New("texture size is not a power of two")
+	typ := TextureTypeImage
+	if isPowerOfTwo(width) && isPowerOfTwo(height) {
+		typ = TextureTypeImageFast
 	}
 
 	t := &Texture{
@@ -45,7 +46,7 @@ func NewImageTexture(img image.Image) (*Texture, error) {
 		widthF:  float64(width),
 		heightF: float64(height),
 		pixels:  make([]color.RGBA, bounds.Dx()*bounds.Dy()),
-		typ:     TextureTypeImage,
+		typ:     typ,
 		scale:   1.0,
 	}
 
@@ -67,10 +68,19 @@ func (t *Texture) Sample(u, v float64) color.RGBA {
 	switch t.typ {
 	case TextureTypeSolidColor:
 		return t.color
-	case TextureTypeImage:
+	case TextureTypeImageFast:
+		// Fast path for mod operation with power of two sizes
 		x := int(u*t.scale*t.widthF) & (t.width - 1)
 		y := int((1-v)*t.scale*t.heightF) & (t.height - 1)
 		return t.pixels[y*t.width+x]
+	case TextureTypeImage:
+		x := int(u*t.scale*t.widthF) % t.width
+		y := int((1-v)*t.scale*t.heightF) % t.height
+		idx := y*t.width + x
+		if idx < 0 {
+			idx = 0
+		}
+		return t.pixels[idx]
 	default:
 		return color.RGBA{255, 0, 255, 255}
 	}

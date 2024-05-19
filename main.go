@@ -7,17 +7,19 @@ import (
 	"log"
 	"os"
 	"path"
+	"runtime"
 	"runtime/pprof"
 
 	rl "github.com/gen2brain/raylib-go/raylib"
 )
 
 const (
-	viewScale   = 2
-	viewWidth   = 800 / viewScale
-	viewHeight  = 600 / viewScale
-	frameRate   = 30
-	windowTitle = "goxgl"
+	downscaleFactor = 2
+	viewWidth       = 800 / downscaleFactor
+	viewHeight      = 600 / downscaleFactor
+	parallel        = true
+	frameRate       = 60
+	windowTitle     = "goxgl"
 )
 
 func onOff(b bool) string {
@@ -31,12 +33,14 @@ func onOff(b bool) string {
 type options struct {
 	cpuProfile string
 	memProfile string
+	trace      string
 }
 
 func parseOptions() *options {
 	opts := &options{}
 	flag.StringVar(&opts.cpuProfile, "cpuprof", "", "write cpu profile to file")
 	flag.StringVar(&opts.memProfile, "memprof", "", "write memory profile to file")
+	flag.StringVar(&opts.trace, "trace", "", "write trace to file")
 	flag.Parse()
 	return opts
 }
@@ -87,6 +91,41 @@ func main() {
 		}()
 	}
 
+	if opts.trace != "" {
+		f, err := os.Create(opts.trace)
+		if err != nil {
+			log.Fatalf("failed to create trace file: %s", err)
+		}
+
+		defer func() {
+			_ = f.Close()
+		}()
+
+		if err := runtime.StartTrace(); err != nil {
+			log.Fatalf("failed to start trace: %s", err)
+		}
+
+		defer func() {
+			log.Printf("[INFO] stopping trace")
+			runtime.StopTrace()
+
+			log.Printf("[INFO] trace stopped")
+		}()
+
+		go func() {
+			for {
+				data := runtime.ReadTrace()
+				if data == nil {
+					break
+				}
+
+				if _, err := f.Write(data); err != nil {
+					log.Printf("[ERROR] failed to write trace: %s", err)
+				}
+			}
+		}()
+	}
+
 	fb := NewFrameBuffer(viewWidth, viewHeight)
 	renderer := NewRenderer(fb)
 	filename := flag.Arg(0)
@@ -115,8 +154,8 @@ func main() {
 	}
 
 	var (
-		windowWidth  = int32(fb.Width * viewScale)
-		windowHeight = int32(fb.Height * viewScale)
+		windowWidth  = int32(fb.Width * downscaleFactor)
+		windowHeight = int32(fb.Height * downscaleFactor)
 		numVertices  = scene.NumVertices()
 		numTriangles = scene.NumTriangles()
 		oumObjects   = scene.NumObjects()
@@ -131,14 +170,9 @@ func main() {
 	renderTexture := rl.LoadRenderTexture(int32(fb.Width), int32(fb.Height))
 	defer rl.UnloadRenderTexture(renderTexture)
 
-	var (
-		lastCursorX = rl.GetMouseX()
-		lastCursorY = rl.GetMouseY()
-	)
-
 	camera := &Camera{
-		Direction: Vec3{0, 0, 1},
-		Position:  Vec3{10, 5, -2},
+		Direction: Vec3{0, 0, -1},
+		Position:  Vec3{0, 0, 5},
 		Up:        Vec3{0, 1, 0},
 	}
 
@@ -157,13 +191,18 @@ func main() {
 	rl.DisableCursor()
 	triggerDraw <- struct{}{}
 
+	var (
+		lastCursorX = rl.GetMouseX()
+		lastCursorY = rl.GetMouseY()
+	)
+
 	for !rl.WindowShouldClose() {
 		<-frameReady
 		fb.SwapBuffers()
 		triggerDraw <- struct{}{}
 
 		forward := camera.Direction.Normalize()
-		forward.Y = 0 // Only move in the XZ plane
+		//forward.Y = 0 // Only move in the XZ plane
 		right := forward.CrossProduct(camera.Up).Normalize()
 
 		switch {
@@ -224,7 +263,7 @@ func main() {
 		rl.DrawTexturePro(
 			renderTexture.Texture,
 			rl.NewRectangle(0, 0, float32(fb.Width), float32(fb.Height)),
-			rl.NewRectangle(0, 0, float32(fb.Width*viewScale), float32(fb.Height*viewScale)),
+			rl.NewRectangle(0, 0, float32(fb.Width*downscaleFactor), float32(fb.Height*downscaleFactor)),
 			rl.NewVector2(0, 0),
 			0,
 			rl.White,
@@ -251,8 +290,8 @@ func main() {
 		)
 
 		for _, info := range renderer.DebugInfo {
-			rl.DrawText(info.Text, int32(info.X*viewScale)+1, int32(info.Y*viewScale)+1, 12, rl.Black)
-			rl.DrawText(info.Text, int32(info.X*viewScale), int32(info.Y*viewScale), 12, rl.Yellow)
+			rl.DrawText(info.Text, int32(info.X*downscaleFactor)+1, int32(info.Y*downscaleFactor)+1, 12, rl.Black)
+			rl.DrawText(info.Text, int32(info.X*downscaleFactor), int32(info.Y*downscaleFactor), 12, rl.Yellow)
 		}
 
 		drawText(
