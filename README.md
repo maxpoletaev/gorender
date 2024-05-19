@@ -5,7 +5,7 @@ to build to learn some math and magic behind 3D graphics. It uses raylib for win
 management and delivering pixels to the screen, but all the rendering is done
 from scratch in Go with no external libraries.
 
-![screenshot](screenshot.png)
+https://github.com/maxpoletaev/goxgl/assets/1812128/fb309de4-3a43-47c5-a90b-879352eb89ab
 
 ## Building
 
