@@ -12,9 +12,9 @@ help: ## print help (this message)
 	| column -t  -s ';'
 
 .PHONY: build
-build: ## build dendy
+build: ## build binary
 	@echo "--------- running: $@ ---------"
-	CGO_ENABLED=1 GODEBUG=cgocheck=0 go build -o=goxgl .
+	CGO_ENABLED=1 GODEBUG=cgocheck=0 go build -o=goxgl -pgo=default.pgo .
 
 PHONY: test
 test: ## run tests

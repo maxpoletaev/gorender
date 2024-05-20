@@ -93,12 +93,17 @@ func (fb *FrameBuffer) Triangle(
 	x0, y0 int, z0 float64, u0, v0 float64,
 	x1, y1 int, z1 float64, u1, v1 float64,
 	x2, y2 int, z2 float64, u2, v2 float64,
+	tileStartX, tileStartY, tileEndX, tileEndY int,
 	texture *Texture,
 	intensity float64,
 ) {
 	// Find the bounding box of the triangle
-	minX, maxX := min(x0, x1, x2), max(x0, x1, x2)+1
-	minY, maxY := min(y0, y1, y2), max(y0, y1, y2)+1
+	minX, maxX := min(x0, x1, x2), max(x0, x1, x2)
+	minY, maxY := min(y0, y1, y2), max(y0, y1, y2)
+
+	// Clip the bounding box to the tile boundaries
+	minX, maxX = max(minX, tileStartX), min(maxX, tileEndX)
+	minY, maxY = max(minY, tileStartY), min(maxY, tileEndY)
 
 	// Ensure the intensity is in the range [0.2, 1.0]
 	intensity = max(0.2, min(intensity, 1.0))
@@ -163,12 +168,17 @@ func (fb *FrameBuffer) Triangle2(
 	x0, y0 int, z0 float64, u0, v0 float64,
 	x1, y1 int, z1 float64, u1, v1 float64,
 	x2, y2 int, z2 float64, u2, v2 float64,
+	tileStartX, tileStartY, tileEndX, tileEndY int,
 	texture *Texture,
 	intensity float64,
 ) {
 	// Find the bounding box of the triangle
 	minX, maxX := min(x0, x1, x2), max(x0, x1, x2)
 	minY, maxY := min(y0, y1, y2), max(y0, y1, y2)
+
+	// Clip the bounding box to the tile boundaries
+	minX, maxX = max(minX, tileStartX), min(maxX, tileEndX)
+	minY, maxY = max(minY, tileStartY), min(maxY, tileEndY)
 
 	// Ensure the intensity is in the range [0.2, 1.0]
 	intensity = max(0.2, min(intensity, 1.0))
@@ -269,6 +279,7 @@ func (fb *FrameBuffer) Triangle3(
 	x0, y0 int, z0 float64, u0, v0 float64,
 	x1, y1 int, z1 float64, u1, v1 float64,
 	x2, y2 int, z2 float64, u2, v2 float64,
+	tileStartX, tileStartY, tileEndX, tileEndY int,
 	texture *Texture,
 	intensity float64,
 ) {
@@ -295,6 +306,10 @@ func (fb *FrameBuffer) Triangle3(
 	// Draw scanlines from y0 to y1 (top half of the triangle)
 	if y1 > y0 {
 		for y := y0; y <= y1; y++ {
+			if y < tileStartY || y >= tileEndY {
+				continue
+			}
+
 			xStart, zStart, uStart, vStart := interpolate(y, y0, y1, x0, x1, z0rec, z1rec, u0, u1, v0, v1)
 			xEnd, zEnd, uEnd, vEnd := interpolate(y, y0, y2, x0, x2, z0rec, z2rec, u0, u2, v0, v2)
 
@@ -304,6 +319,10 @@ func (fb *FrameBuffer) Triangle3(
 			}
 
 			for x := xStart; x <= xEnd; x++ {
+				if x < tileStartX || x >= tileEndX {
+					continue
+				}
+
 				t := float64(x-xStart) / float64(xEnd-xStart)
 				z := zStart + t*(zEnd-zStart)
 				u := uStart + t*(uEnd-uStart)
@@ -323,6 +342,10 @@ func (fb *FrameBuffer) Triangle3(
 	// Draw scanlines from y1 to y2 (bottom half of the triangle)
 	if y2 > y1 {
 		for y := y1; y <= y2; y++ {
+			if y < tileStartY || y >= tileEndY {
+				continue
+			}
+
 			xStart, zStart, uStart, vStart := interpolate(y, y1, y2, x1, x2, z1rec, z2rec, u1, u2, v1, v2)
 			xEnd, zEnd, uEnd, vEnd := interpolate(y, y0, y2, x0, x2, z0rec, z2rec, u0, u2, v0, v2)
 
@@ -332,6 +355,10 @@ func (fb *FrameBuffer) Triangle3(
 			}
 
 			for x := xStart; x <= xEnd; x++ {
+				if x < tileStartX || x >= tileEndX {
+					continue
+				}
+
 				t := float64(x-xStart) / float64(xEnd-xStart)
 				z := zStart + t*(zEnd-zStart)
 				u := uStart + t*(uEnd-uStart)

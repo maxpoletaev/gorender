@@ -178,7 +178,13 @@ func LoadObjFile(filename string) (*Mesh, error) {
 						c.Textures[m.Name] = texture
 					} else {
 						log.Printf("[INFO] loading texture: %s", m.MapKd)
-						texture, err = LoadTextureFile(path.Join(dirname, m.MapKd))
+
+						texturePath := m.MapKd
+						if texturePath[0] != '/' {
+							texturePath = path.Join(dirname, m.MapKd)
+						}
+
+						texture, err = LoadTextureFile(texturePath)
 						if err != nil {
 							return nil, fmt.Errorf("failed to load texture: %s", err)
 						}

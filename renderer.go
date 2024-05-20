@@ -93,13 +93,13 @@ type Renderer struct {
 	DebugInfo    []DebugInfo
 
 	// Parallel rendering stuff
-	toProject      chan projectionTask
-	toDraw         chan rasterizationTask
-	triangles      []Triangle
-	tileBoundaries [maxTiles][2]Vec2
-	wg             sync.WaitGroup
-	mut            sync.Mutex
-	numTiles       int
+	toProject  chan projectionTask
+	toDraw     chan rasterizationTask
+	tileBounds [maxTiles][2]Vec2
+	triangles  []Triangle
+	wg         sync.WaitGroup
+	mut        sync.Mutex
+	numTiles   int
 }
 
 func NewRenderer(fb *FrameBuffer) *Renderer {
@@ -109,7 +109,7 @@ func NewRenderer(fb *FrameBuffer) *Renderer {
 	fovY := 45 * (math.Pi / 180)
 	fovX := 2 * math.Atan(math.Tan(fovY/2)*aspectX)
 
-	zNear, zFar := 0.0, 30.0
+	zNear, zFar := 0.0, 50.0
 	frustum := NewFrustum(zNear, zFar)
 
 	r := &Renderer{
@@ -141,25 +141,31 @@ func NewRenderer(fb *FrameBuffer) *Renderer {
 
 	for i := 0; i < r.numTiles; i++ {
 		start, end := calculateTileBoundaries(i, r.numTiles, fb.Width, fb.Height)
-		r.tileBoundaries[i] = [2]Vec2{start, end}
+		r.tileBounds[i] = [2]Vec2{start, end}
 	}
 
 	return r
 }
 
-func (r *Renderer) drawProjection(t *Triangle) {
+func (r *Renderer) drawProjection(t *Triangle, tile int) {
 	a, b, c := t.Points[0], t.Points[1], t.Points[2]
 	uvA, uvB, uvC := t.UVs[0], t.UVs[1], t.UVs[2]
+
+	var (
+		tileStart = r.tileBounds[tile][0]
+		tileEnd   = r.tileBounds[tile][1]
+	)
 
 	if !r.ShowTextures {
 		t.Texture = nil
 	}
 
 	if r.ShowFaces {
-		r.fb.Triangle(
+		r.fb.Triangle2(
 			int(a.X), int(a.Y), a.W, uvA.U, uvA.V,
 			int(b.X), int(b.Y), b.W, uvB.U, uvB.V,
 			int(c.X), int(c.Y), c.W, uvC.U, uvC.V,
+			int(tileStart.X), int(tileStart.Y), int(tileEnd.X), int(tileEnd.Y),
 			t.Texture,
 			t.Intensity,
 		)
@@ -193,22 +199,17 @@ func (r *Renderer) drawProjection(t *Triangle) {
 	}
 }
 
-func (r *Renderer) renderTile(tileID int) {
+func (r *Renderer) renderTile(tile int) {
 	for i := range r.triangles {
 		proj := &r.triangles[i]
 
-		if proj.TileNumbers&(1<<tileID) != 0 {
-			r.drawProjection(proj)
+		if proj.TileNumbers&(1<<tile) != 0 {
+			r.drawProjection(proj, tile)
 		}
 	}
 }
 
-func (r *Renderer) IsTriangleInTile(points *[3]Vec4, tile int) bool {
-	var (
-		start = r.tileBoundaries[tile][0]
-		end   = r.tileBoundaries[tile][1]
-	)
-
+func (r *Renderer) IsTriangleInBounds(points *[3]Vec4, start, end *Vec2) bool {
 	var (
 		// Triangle bounding box
 		minX = min(points[0].X, points[1].X, points[2].X)
@@ -241,13 +242,22 @@ func (r *Renderer) projectObject(object *Object, camera *Camera) {
 	}
 
 	// Quick check if the object is inside the frustum
-	if !r.frustum.IsBoxVisible(bbox) {
+	boxVisibility := r.frustum.BoxVisibility(bbox)
+	if boxVisibility == BoxVisibilityOutside {
 		return
 	}
 
 	var (
+		// Local buffer to avoid locking the global one for each triangle
 		localBuf     [16]Triangle
 		localBufSize int
+	)
+
+	var (
+		// Clipping will produce of up to 9 new tileTriangles
+		clipPoints [maxClipPoints][3]Vec4
+		clipUVs    [maxClipPoints][3]UV
+		clipCount  int
 	)
 
 	for fi := range object.Faces {
@@ -266,18 +276,18 @@ func (r *Renderer) projectObject(object *Object, camera *Camera) {
 		}
 
 		a, b, c := points[0].ToVec3(), points[1].ToVec3(), points[2].ToVec3()
-		faceNormal := b.Sub(a).CrossProduct(c.Sub(a)).Normalize()
+		faceNormal := b.Sub(a).CrossProduct(c.Sub(a))
 
 		if r.BackfaceCulling {
 			// Normal-based backface culling (face is not visible if the normal is not facing the camera)
-			if faceNormal.DotProduct(Vec3{0, 0, 0}.Sub(a).Normalize()) < 0 {
+			if faceNormal.DotProduct(Vec3{0, 0, 0}.Sub(a)) < 0 {
 				continue
 			}
 		}
 
-		var (
-			lightIntensity = 0.5
-		)
+		// Normalize for lighting calculations
+		faceNormal = faceNormal.Normalize()
+		lightIntensity := 0.5
 
 		if r.Lighting {
 			const (
@@ -289,15 +299,7 @@ func (r *Renderer) projectObject(object *Object, camera *Camera) {
 			lightIntensity = ambientStrength + diffuse
 		}
 
-		var (
-			// Clipping will produce of up to 9 new tileTriangles
-			clipPoints [maxClipPoints][3]Vec4
-			clipUVs    [maxClipPoints][3]UV
-			clipCount  int
-		)
-
-		// TODO: check if clipping is needed (all points are inside)
-		if r.FrustumClipping {
+		if r.FrustumClipping && boxVisibility != BoxVisibilityInside {
 			uvs := [3]UV{face.UVa, face.UVb, face.UVc}
 			clipCount = r.frustum.ClipTriangle(&points, &uvs, &clipPoints, &clipUVs)
 		} else {
@@ -320,7 +322,7 @@ func (r *Renderer) projectObject(object *Object, camera *Camera) {
 			// Precompute which tiles the triangle should be rendered to
 			var tileNumbers uint16
 			for t := 0; t < r.numTiles; t++ {
-				if r.IsTriangleInTile(newPoints, t) {
+				if r.IsTriangleInBounds(newPoints, &r.tileBounds[t][0], &r.tileBounds[t][1]) {
 					tileNumbers |= 1 << t
 				}
 			}
@@ -371,10 +373,9 @@ func (r *Renderer) startWorker() {
 func (r *Renderer) drawTilesBoundaries() {
 	for i := 0; i < r.numTiles; i++ {
 		var (
-			start = r.tileBoundaries[i][0]
-			end   = r.tileBoundaries[i][1]
+			start = r.tileBounds[i][0]
+			end   = r.tileBounds[i][1]
 		)
-
 		r.fb.Line(int(start.X), int(start.Y), int(end.X), int(start.Y), color.RGBA{255, 0, 0, 255})
 		r.fb.Line(int(end.X), int(start.Y), int(end.X), int(end.Y), color.RGBA{255, 0, 0, 255})
 		r.fb.Line(int(end.X), int(end.Y), int(start.X), int(end.Y), color.RGBA{255, 0, 0, 255})

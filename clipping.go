@@ -15,6 +15,12 @@ const (
 	PlaneFar
 )
 
+const (
+	BoxVisibilityOutside = iota
+	BoxVisibilityIntersect
+	BoxVisibilityInside
+)
+
 type Polygon struct {
 	Points [maxClipPoints]Vec4
 	UVs    [maxClipPoints]UV
@@ -106,23 +112,33 @@ func NewFrustum(zNear, zFar float64) *Frustum {
 	}
 }
 
-func (f *Frustum) IsBoxVisible(bbox [8]Vec4) bool {
+func (f *Frustum) BoxVisibility(bbox [8]Vec4) int {
+	visibility := BoxVisibilityInside
+
 	for i := range f.Planes {
-		outside := 0
+		outside, inside := 0, 0
 
 		for _, point := range bbox {
 			if f.Planes[i].DistanceToVertex(point) > 0 {
 				outside++
+			} else {
+				inside++
 			}
 		}
 
+		// All points are outside the plane, the box is not visible
 		if outside == len(bbox) {
-			return false
+			return BoxVisibilityOutside
+		}
+
+		// Some points are outside, clipping is needed
+		if inside != len(bbox) {
+			visibility = BoxVisibilityIntersect
 		}
 
 	}
 
-	return true
+	return visibility
 }
 
 func interpolateUV(a, b UV, factor float64) UV {
