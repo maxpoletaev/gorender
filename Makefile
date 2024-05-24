@@ -14,9 +14,21 @@ help: ## print help (this message)
 .PHONY: build
 build: ## build binary
 	@echo "--------- running: $@ ---------"
-	CGO_ENABLED=1 GODEBUG=cgocheck=0 go build -o=goxgl -pgo=default.pgo .
+	CGO_ENABLED=1 GODEBUG=cgocheck=0 go build -o=goxgl -pgo=default.pgo
+
+.PHONY: build
+build_debug: ## build with additional checks
+	@echo "--------- running: $@ ---------"
+	CGO_ENABLED=1 GODEBUG=cgocheck=0 go build -o=goxgl -pgo=default.pgo -gcflags="-m -d=ssa/check_bce" 2>&1 | tee build.log
+	go-escape-lint -f build.log
 
 PHONY: test
 test: ## run tests
 	@echo "--------- running: $@ ---------"
 	@go test -v $(TEST_PACKAGE)
+
+
+.PHONY: bench
+bench: ## run benchmarks
+	@echo "--------- running: $@ ---------"
+	@GOGC=off GODEBUG=asyncpreemptoff=1 go test -bench=. -cpuprofile bench_cpuprof.pprof $(TEST_PACKAGE)

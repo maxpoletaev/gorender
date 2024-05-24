@@ -1,5 +1,7 @@
 package main
 
+import "sync"
+
 const (
 	// maxClipPoints is the maximum number of vertices a polygon can have.
 	// 9 is the worst case scenario for a triangle clipped against all 6 planes.
@@ -78,10 +80,17 @@ func (p *Plane) Intersect(q0, q1 Vec4) (Vec4, float64) {
 }
 
 type Frustum struct {
-	Planes [6]Plane
+	Planes      [6]Plane
+	polygonPool *sync.Pool // *Polygon
 }
 
 func NewFrustum(zNear, zFar float64) *Frustum {
+	polygonPool := &sync.Pool{
+		New: func() any {
+			return &Polygon{}
+		},
+	}
+
 	return &Frustum{
 		Planes: [6]Plane{
 			PlaneLeft: {
@@ -109,36 +118,33 @@ func NewFrustum(zNear, zFar float64) *Frustum {
 				Normal: Vec4{0, 0, 1, 0},
 			},
 		},
+		polygonPool: polygonPool,
 	}
 }
 
-func (f *Frustum) BoxVisibility(bbox [8]Vec4) int {
-	visibility := BoxVisibilityInside
-
+func (f *Frustum) BoxVisibility(bbox *[8]Vec4) int {
 	for i := range f.Planes {
-		outside, inside := 0, 0
+		outside := 0
 
 		for _, point := range bbox {
 			if f.Planes[i].DistanceToVertex(point) > 0 {
 				outside++
-			} else {
-				inside++
 			}
 		}
 
-		// All points are outside the plane, the box is not visible
+		// All points are outside, the box is not visible
 		if outside == len(bbox) {
 			return BoxVisibilityOutside
 		}
 
 		// Some points are outside, clipping is needed
-		if inside != len(bbox) {
-			visibility = BoxVisibilityIntersect
+		if outside > 0 {
+			return BoxVisibilityIntersect
 		}
 
 	}
 
-	return visibility
+	return BoxVisibilityInside
 }
 
 func interpolateUV(a, b UV, factor float64) UV {
@@ -153,11 +159,17 @@ func (f *Frustum) ClipTriangle(
 	pointsOut *[maxClipPoints][3]Vec4,
 	uvsOut *[maxClipPoints][3]UV,
 ) (numOut int) {
-	polygon := Polygon{
-		Points: [maxClipPoints]Vec4{pointsIn[0], pointsIn[1], pointsIn[2]},
-		UVs:    [maxClipPoints]UV{uvsIn[0], uvsIn[1], uvsIn[2]},
-		Count:  3,
-	}
+	polygon := f.polygonPool.Get().(*Polygon)
+	defer f.polygonPool.Put(polygon)
+	polygon.Count = 0
+
+	polygon2 := f.polygonPool.Get().(*Polygon)
+	defer f.polygonPool.Put(polygon2)
+	polygon2.Count = 0
+
+	polygon.AddVertex(pointsIn[0], uvsIn[0])
+	polygon.AddVertex(pointsIn[1], uvsIn[1])
+	polygon.AddVertex(pointsIn[2], uvsIn[2])
 
 	planes := []int{
 		PlaneLeft,
@@ -171,8 +183,8 @@ func (f *Frustum) ClipTriangle(
 	// Iterate over each plane of the frustum and build a polygon from the input
 	// triangle, containing only the vertices that are inside the frustum.
 	for _, pi := range planes {
-		var newPolygon Polygon
 		plane := &f.Planes[pi]
+		polygon2.Count = 0
 
 		// Iterate over each edge of the polygon
 		for b := 0; b < polygon.Count; b++ {
@@ -184,24 +196,24 @@ func (f *Frustum) ClipTriangle(
 				if !plane.IsVertexInside(vertB) {
 					intersect, factor := plane.Intersect(vertA, vertB)
 					uv := interpolateUV(uvA, uvB, factor)
-					newPolygon.AddVertex(intersect, uv)
+					polygon2.AddVertex(intersect, uv)
 				}
-				newPolygon.AddVertex(vertA, uvA)
+				polygon2.AddVertex(vertA, uvA)
 			} else if plane.IsVertexInside(vertB) {
 				intersect, factor := plane.Intersect(vertA, vertB)
 				uv := interpolateUV(uvA, uvB, factor)
-				newPolygon.AddVertex(intersect, uv)
+				polygon2.AddVertex(intersect, uv)
 			}
 		}
 
 		// All vertices are outside
-		if newPolygon.Count == 0 {
+		if polygon2.Count == 0 {
 			return 0
 		}
 
-		polygon = newPolygon
+		polygon, polygon2 = polygon2, polygon
 	}
 
-	// Convert the polygon back to tileTriangles
+	// Convert the polygon back to triangles
 	return polygon.Triangulate(pointsOut, uvsOut)
 }

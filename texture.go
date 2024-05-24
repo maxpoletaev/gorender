@@ -3,6 +3,8 @@ package main
 import (
 	"image"
 	"image/color"
+	_ "image/jpeg"
+	_ "image/png"
 	"os"
 )
 
@@ -70,12 +72,12 @@ func (t *Texture) Sample(u, v float64) color.RGBA {
 		return t.color
 	case TextureTypeImageFast:
 		// Fast path for mod operation with power of two sizes
-		x := int(u*t.scale*t.widthF) & (t.width - 1)
-		y := int((1-v)*t.scale*t.heightF) & (t.height - 1)
+		x := int((1-u)*t.scale*t.widthF) & (t.width - 1)
+		y := int(v*t.scale*t.heightF) & (t.height - 1)
 		return t.pixels[y*t.width+x]
 	case TextureTypeImage:
-		x := int(u*t.scale*t.widthF) % t.width
-		y := int((1-v)*t.scale*t.heightF) % t.height
+		x := int((1-u)*t.scale*t.widthF) % t.width
+		y := int(v*t.scale*t.heightF) % t.height
 		idx := y*t.width + x
 		if idx < 0 {
 			idx = 0

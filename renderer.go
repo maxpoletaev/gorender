@@ -43,19 +43,19 @@ type projectionTask struct {
 }
 
 type rasterizationTask struct {
-	tile int
+	tile uint
 }
 
-func calculateTileBoundaries(tile int, numTiles int, width, height int) (start, end Vec2) {
+func calculateTileBoundaries(tile uint, numTiles uint, width, height int) (start, end Vec2) {
 	if numTiles == 1 {
 		return Vec2{0, 0}, Vec2{float64(width), float64(height)}
 	}
 
 	var (
-		numTilesX  = int(math.Sqrt(float64(numTiles)))
+		numTilesX  = uint(math.Sqrt(float64(numTiles)))
 		numTilesY  = (numTiles + numTilesX - 1) / numTilesX
-		tileWidth  = (width + numTilesX - 1) / numTilesX
-		tileHeight = (height + numTilesY - 1) / numTilesY
+		tileWidth  = (uint(width) + numTilesX - 1) / numTilesX
+		tileHeight = (uint(height) + numTilesY - 1) / numTilesY
 	)
 
 	start.X = float64((tile % numTilesX) * tileWidth)
@@ -72,6 +72,11 @@ func calculateTileBoundaries(tile int, numTiles int, width, height int) (start, 
 	}
 
 	return start, end
+}
+
+type LocalBuffer struct {
+	tileTriangles     [maxTiles][128]Triangle
+	tileTriangleCount [maxTiles]int
 }
 
 type Renderer struct {
@@ -92,14 +97,15 @@ type Renderer struct {
 	DebugEnabled bool
 	DebugInfo    []DebugInfo
 
-	// Parallel rendering stuff
-	toProject  chan projectionTask
-	toDraw     chan rasterizationTask
-	tileBounds [maxTiles][2]Vec2
-	triangles  []Triangle
-	wg         sync.WaitGroup
-	mut        sync.Mutex
-	numTiles   int
+	toProject chan projectionTask
+	toDraw    chan rasterizationTask
+	wg        sync.WaitGroup
+
+	numTiles      uint
+	tileBounds    [maxTiles][2]Vec2
+	tileTriangles [maxTiles][]Triangle
+	tileLocks     [maxTiles]sync.Mutex
+	localBufPool  *sync.Pool // *LocalBuffer
 }
 
 func NewRenderer(fb *FrameBuffer) *Renderer {
@@ -111,6 +117,12 @@ func NewRenderer(fb *FrameBuffer) *Renderer {
 
 	zNear, zFar := 0.0, 50.0
 	frustum := NewFrustum(zNear, zFar)
+
+	localBufPool := &sync.Pool{
+		New: func() interface{} {
+			return &LocalBuffer{}
+		},
+	}
 
 	r := &Renderer{
 		fb:              fb,
@@ -129,17 +141,18 @@ func NewRenderer(fb *FrameBuffer) *Renderer {
 		numTiles:        1,
 		toProject:       make(chan projectionTask, 256),
 		toDraw:          make(chan rasterizationTask, maxTiles),
+		localBufPool:    localBufPool,
 	}
 
 	if parallel {
-		r.numTiles = max(runtime.NumCPU(), maxTiles)
+		r.numTiles = max(uint(runtime.NumCPU()), maxTiles)
 
-		for i := 0; i < r.numTiles; i++ {
-			go r.startWorker()
+		for i := uint(0); i < r.numTiles; i++ {
+			go r.startWorker(i)
 		}
 	}
 
-	for i := 0; i < r.numTiles; i++ {
+	for i := uint(0); i < r.numTiles; i++ {
 		start, end := calculateTileBoundaries(i, r.numTiles, fb.Width, fb.Height)
 		r.tileBounds[i] = [2]Vec2{start, end}
 	}
@@ -147,7 +160,7 @@ func NewRenderer(fb *FrameBuffer) *Renderer {
 	return r
 }
 
-func (r *Renderer) drawProjection(t *Triangle, tile int) {
+func (r *Renderer) drawProjection(t *Triangle, tile uint) {
 	a, b, c := t.Points[0], t.Points[1], t.Points[2]
 	uvA, uvB, uvC := t.UVs[0], t.UVs[1], t.UVs[2]
 
@@ -199,17 +212,14 @@ func (r *Renderer) drawProjection(t *Triangle, tile int) {
 	}
 }
 
-func (r *Renderer) renderTile(tile int) {
-	for i := range r.triangles {
-		proj := &r.triangles[i]
-
-		if proj.TileNumbers&(1<<tile) != 0 {
-			r.drawProjection(proj, tile)
-		}
+func (r *Renderer) renderTile(tile uint) {
+	for i := range r.tileTriangles[tile] {
+		r.drawProjection(&r.tileTriangles[tile][i], tile)
 	}
 }
 
-func (r *Renderer) IsTriangleInBounds(points *[3]Vec4, start, end *Vec2) bool {
+// identifyTriangleTiles returns a bitfield of tile numbers that the triangle is visible in.
+func (r *Renderer) identifyTriangleTiles(points *[3]Vec4) (tileNums uint16) {
 	var (
 		// Triangle bounding box
 		minX = min(points[0].X, points[1].X, points[2].X)
@@ -218,69 +228,80 @@ func (r *Renderer) IsTriangleInBounds(points *[3]Vec4, start, end *Vec2) bool {
 		maxY = max(points[0].Y, points[1].Y, points[2].Y)
 	)
 
-	if maxX < start.X || minX > end.X ||
-		maxY < start.Y || minY > end.Y {
-		return false
+	for i := uint(0); i < r.numTiles; i++ {
+		start, end := &r.tileBounds[i][0], &r.tileBounds[i][1]
+		if maxX < start.X || minX > end.X || maxY < start.Y || minY > end.Y {
+			continue
+		}
+
+		tileNums |= 1 << i
 	}
 
-	return true
+	return tileNums
 }
 
+// projectObject projects the object to the screen space. Object’s Face projections are
+// stored in the corresponding tileTriangle buffers for later rasterization.
 func (r *Renderer) projectObject(object *Object, camera *Camera) {
 	worldMatrix := NewWorldMatrix(object.Scale, object.Rotation, object.Translation)
 	viewMatrix := NewViewMatrix(camera.Position, camera.Direction, camera.Up)
 	perspectiveMatrix := NewPerspectiveMatrix(r.fovY, r.aspectX, r.zNear, r.zFar)
+
+	mvpMatrix := NewIdentityMatrix()
+	mvpMatrix = mvpMatrix.Multiply(perspectiveMatrix)
+	mvpMatrix = mvpMatrix.Multiply(viewMatrix)
+	mvpMatrix = mvpMatrix.Multiply(worldMatrix)
+
 	screenMatrix := NewScreenMatrix(r.fb.Width, r.fb.Height)
 	lightDirection := Vec3{Y: 0.5, Z: -1}.Normalize()
 	bbox := object.BoundingBox
 
 	// Apply transformations to the bounding box
 	for i := 0; i < 8; i++ {
-		bbox[i] = worldMatrix.MultiplyVec4(bbox[i])
-		bbox[i] = viewMatrix.MultiplyVec4(bbox[i])
-		bbox[i] = perspectiveMatrix.MultiplyVec4(bbox[i])
+		bbox[i] = matrixMultiplyVec4(&mvpMatrix, bbox[i])
 	}
 
 	// Quick check if the object is inside the frustum
-	boxVisibility := r.frustum.BoxVisibility(bbox)
+	boxVisibility := r.frustum.BoxVisibility(&bbox)
 	if boxVisibility == BoxVisibilityOutside {
 		return
 	}
 
 	var (
-		// Local buffer to avoid locking the global one for each triangle
-		localBuf     [16]Triangle
-		localBufSize int
-	)
+		// Original triangle points
+		points [3]Vec4
 
-	var (
-		// Clipping will produce of up to 9 new tileTriangles
+		// New points after frustum clipping
 		clipPoints [maxClipPoints][3]Vec4
 		clipUVs    [maxClipPoints][3]UV
 		clipCount  int
 	)
 
+	// Local buffers are pooled to avoid zeroing them on each frame
+	localBuf := r.localBufPool.Get().(*LocalBuffer)
+	defer r.localBufPool.Put(localBuf)
+	tileTriangles := &localBuf.tileTriangles
+	tileTriangleCount := &localBuf.tileTriangleCount
+
+	// Reset the counts for each tile just in case.
+	for i := range tileTriangleCount {
+		tileTriangleCount[i] = 0
+	}
+
 	for fi := range object.Faces {
-		face := &object.Faces[fi]
+		face := &object.Faces[fi] // avoid face copy
 
-		points := [3]Vec4{
-			object.Vertices[face.A].ToVec4(),
-			object.Vertices[face.B].ToVec4(),
-			object.Vertices[face.C].ToVec4(),
-		}
+		points[0] = matrixMultiplyVec4(&mvpMatrix, object.Vertices[face.A].ToVec4())
+		points[1] = matrixMultiplyVec4(&mvpMatrix, object.Vertices[face.B].ToVec4())
+		points[2] = matrixMultiplyVec4(&mvpMatrix, object.Vertices[face.C].ToVec4())
 
-		for p := range points {
-			points[p] = worldMatrix.MultiplyVec4(points[p])       // Local -> World space
-			points[p] = viewMatrix.MultiplyVec4(points[p])        // World -> View space
-			points[p] = perspectiveMatrix.MultiplyVec4(points[p]) // View -> Clip space
-		}
-
-		a, b, c := points[0].ToVec3(), points[1].ToVec3(), points[2].ToVec3()
-		faceNormal := b.Sub(a).CrossProduct(c.Sub(a))
+		// Calculate the face normal (cross product of two edges)
+		v0, v1, v2 := points[0].ToVec3(), points[1].ToVec3(), points[2].ToVec3()
+		faceNormal := v1.Sub(v0).CrossProduct(v2.Sub(v0))
 
 		if r.BackfaceCulling {
 			// Normal-based backface culling (face is not visible if the normal is not facing the camera)
-			if faceNormal.DotProduct(Vec3{0, 0, 0}.Sub(a)) < 0 {
+			if faceNormal.DotProduct(Vec3{0, 0, 0}.Sub(v0)) < 0 {
 				continue
 			}
 		}
@@ -294,7 +315,6 @@ func (r *Renderer) projectObject(object *Object, camera *Camera) {
 				ambientStrength = 0.5
 				diffuseStrength = 0.5
 			)
-
 			diffuse := math.Max(faceNormal.DotProduct(lightDirection), 0.0) * diffuseStrength
 			lightIntensity = ambientStrength + diffuse
 		}
@@ -309,73 +329,73 @@ func (r *Renderer) projectObject(object *Object, camera *Camera) {
 		}
 
 		for i := 0; i < clipCount; i++ {
-			newPoints := &clipPoints[i]
+			newPoints := clipPoints[i]
 
 			for j, v := range newPoints {
 				origW := v.W
-				v = v.Divide(v.W) // Perspective divide
-				v = screenMatrix.MultiplyVec4(Vec4{v.X, v.Y, v.Z, 1})
-				v.W = origW // Need the original W for texture mapping
+				v = v.Divide(v.W) // perspective divide
+				v = matrixMultiplyVec4(&screenMatrix, v)
+				v.W = origW // need the original W for texture mapping
 				newPoints[j] = v
 			}
 
-			// Precompute which tiles the triangle should be rendered to
-			var tileNumbers uint16
-			for t := 0; t < r.numTiles; t++ {
-				if r.IsTriangleInBounds(newPoints, &r.tileBounds[t][0], &r.tileBounds[t][1]) {
-					tileNumbers |= 1 << t
-				}
-			}
-
-			// Keep the triangle in the local buffer to avoid tacking
-			// the global mutex too often
-			localBuf[localBufSize] = Triangle{
-				Points:      *newPoints,
+			triangle := Triangle{
+				Points:      newPoints,
 				UVs:         clipUVs[i],
 				Texture:     face.Texture,
 				Intensity:   lightIntensity,
-				TileNumbers: tileNumbers,
+				TileNumbers: r.identifyTriangleTiles(&newPoints),
 			}
 
-			// Flush the buffer once it's full
-			if localBufSize++; localBufSize == len(localBuf) {
-				r.mut.Lock()
-				r.triangles = append(r.triangles, localBuf[:]...)
-				r.mut.Unlock()
-				localBufSize = 0
+			for tile := uint(0); tile < r.numTiles; tile++ {
+				if triangle.TileNumbers&(1<<tile) != 0 {
+					// Add triangle to the corresponding local tile buffer
+					tileTriangles[tile][tileTriangleCount[tile]] = triangle
+					tileTriangleCount[tile]++
+
+					// Flush local buffer to the global buffer once it's full
+					if tileTriangleCount[tile] == len(tileTriangles[tile]) {
+						r.tileLocks[tile].Lock()
+						r.tileTriangles[tile] = append(r.tileTriangles[tile], tileTriangles[tile][:]...)
+						r.tileLocks[tile].Unlock()
+						tileTriangleCount[tile] = 0
+					}
+				}
 			}
 		}
 	}
 
-	// Flush the remaining tileTriangles
-	if localBufSize != 0 {
-		r.mut.Lock()
-		r.triangles = append(r.triangles, localBuf[:]...)
-		r.mut.Unlock()
-		localBufSize = 0
+	// Flush the remaining triangles to the global buffer
+	for tile := range tileTriangles {
+		if tileTriangleCount[tile] != 0 {
+			r.tileLocks[tile].Lock()
+			r.tileTriangles[tile] = append(r.tileTriangles[tile], tileTriangles[tile][:tileTriangleCount[tile]]...)
+			r.tileLocks[tile].Unlock()
+			tileTriangleCount[tile] = 0
+		}
 	}
 }
 
-func (r *Renderer) startWorker() {
+func (r *Renderer) startWorker(tile uint) {
 	for {
 		select {
 		case task := <-r.toProject:
 			r.projectObject(task.object, task.camera)
 			r.wg.Done()
-
-		case task := <-r.toDraw:
-			r.renderTile(task.tile)
+		case <-r.toDraw:
+			r.renderTile(tile)
 			r.wg.Done()
 		}
 	}
 }
 
 func (r *Renderer) drawTilesBoundaries() {
-	for i := 0; i < r.numTiles; i++ {
+	for i := uint(0); i < r.numTiles; i++ {
 		var (
 			start = r.tileBounds[i][0]
 			end   = r.tileBounds[i][1]
 		)
+
 		r.fb.Line(int(start.X), int(start.Y), int(end.X), int(start.Y), color.RGBA{255, 0, 0, 255})
 		r.fb.Line(int(end.X), int(start.Y), int(end.X), int(end.Y), color.RGBA{255, 0, 0, 255})
 		r.fb.Line(int(end.X), int(end.Y), int(start.X), int(end.Y), color.RGBA{255, 0, 0, 255})
@@ -384,7 +404,10 @@ func (r *Renderer) drawTilesBoundaries() {
 }
 
 func (r *Renderer) Draw(objects []*Object, camera *Camera) {
-	r.triangles = r.triangles[:0]
+	for i := uint(0); i < r.numTiles; i++ {
+		r.tileTriangles[i] = r.tileTriangles[i][:0]
+	}
+
 	r.fb.Clear(color.RGBA{50, 50, 50, 255})
 	r.fb.DotGrid(color.RGBA{100, 100, 100, 255}, 10)
 
@@ -398,8 +421,8 @@ func (r *Renderer) Draw(objects []*Object, camera *Camera) {
 		}
 		r.wg.Wait()
 
-		r.wg.Add(r.numTiles)
-		for i := 0; i < r.numTiles; i++ {
+		r.wg.Add(int(r.numTiles))
+		for i := uint(0); i < r.numTiles; i++ {
 			r.toDraw <- rasterizationTask{tile: i}
 		}
 		r.wg.Wait()
@@ -407,7 +430,8 @@ func (r *Renderer) Draw(objects []*Object, camera *Camera) {
 		for i := range objects {
 			r.projectObject(objects[i], camera)
 		}
-		for i := 0; i < r.numTiles; i++ {
+
+		for i := uint(0); i < r.numTiles; i++ {
 			r.renderTile(i)
 		}
 	}

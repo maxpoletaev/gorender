@@ -3,7 +3,6 @@ package main
 import (
 	"flag"
 	"fmt"
-	_ "image/png"
 	"log"
 	"os"
 	"path"
@@ -31,13 +30,15 @@ func onOff(b bool) string {
 }
 
 type options struct {
-	cpuProfile string
-	memProfile string
-	trace      string
+	blockProfile string
+	cpuProfile   string
+	memProfile   string
+	trace        string
 }
 
 func parseOptions() *options {
 	opts := &options{}
+	flag.StringVar(&opts.blockProfile, "blockprof", "", "write block profile to file")
 	flag.StringVar(&opts.cpuProfile, "cpuprof", "", "write cpu profile to file")
 	flag.StringVar(&opts.memProfile, "memprof", "", "write memory profile to file")
 	flag.StringVar(&opts.trace, "trace", "", "write trace to file")
@@ -55,6 +56,20 @@ func main() {
 
 	if flag.NArg() == 0 {
 		log.Fatalf("usage: %s [options] filename.obj", os.Args[0])
+	}
+
+	if opts.blockProfile != "" {
+		runtime.SetBlockProfileRate(1)
+
+		f, err := os.Create(opts.blockProfile)
+		if err != nil {
+			log.Fatalf("failed to create block profile: %s", err)
+		}
+
+		defer func() {
+			_ = pprof.Lookup("block").WriteTo(f, 0)
+			_ = f.Close()
+		}()
 	}
 
 	if opts.cpuProfile != "" {
@@ -201,6 +216,10 @@ func main() {
 		fb.SwapBuffers()
 		triggerDraw <- struct{}{}
 
+		//for _, obj := range scene.Objects {
+		//	obj.Rotation.Y += 0.1
+		//}
+
 		forward := camera.Direction.Normalize()
 		//forward.Y = 0 // Only move in the XZ plane
 		right := forward.CrossProduct(camera.Up).Normalize()
@@ -215,6 +234,10 @@ func main() {
 			camera.Position = camera.Position.Sub(right.Multiply(0.15))
 		case rl.IsKeyDown(rl.KeyD):
 			camera.Position = camera.Position.Add(right.Multiply(0.15))
+		case rl.IsKeyDown(rl.KeyUp):
+			camera.Position.Y += 0.05
+		case rl.IsKeyDown(rl.KeyDown):
+			camera.Position.Y -= 0.05
 
 		// Render options
 		case rl.IsKeyPressed(rl.KeyB):

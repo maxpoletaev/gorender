@@ -22,12 +22,10 @@ func NewFrameBuffer(width, height int) *FrameBuffer {
 	}
 }
 
-func (fb *FrameBuffer) Pixel(x, y int, c color.RGBA, z float64) {
+func (fb *FrameBuffer) Pixel(x, y int, c color.RGBA) {
 	idx := y*fb.Width + x
-
-	if idx > 0 && idx < len(fb.Pixels) && z >= fb.ZBuffer[idx] {
+	if idx > 0 && idx < len(fb.Pixels) {
 		fb.Pixels[idx] = c
-		fb.ZBuffer[idx] = z
 	}
 }
 
@@ -48,7 +46,7 @@ func (fb *FrameBuffer) Clear(c color.RGBA) {
 func (fb *FrameBuffer) DotGrid(c color.RGBA, step int) {
 	for y := step; y < fb.Height; y += step {
 		for x := step; x < fb.Width; x += step {
-			fb.Pixel(x, y, c, -1.0)
+			fb.Pixel(x, y, c)
 		}
 	}
 }
@@ -59,7 +57,7 @@ func (fb *FrameBuffer) Rect(x, y, width, height int, c color.RGBA) {
 	}
 	for py := y; py < y+height; py++ {
 		for px := x; px < x+width; px++ {
-			fb.Pixel(px, py, c, 1.0)
+			fb.Pixel(px, py, c)
 		}
 	}
 }
@@ -74,7 +72,7 @@ func (fb *FrameBuffer) Line(x0, y0 int, x1, y1 int, c color.RGBA) {
 	curX, curY := float64(x0), float64(y0)
 
 	for i := 0; i <= sideLength; i++ {
-		fb.Pixel(int(curX), int(curY), c, 100)
+		fb.Pixel(int(curX), int(curY), c)
 		curX += xStep
 		curY += yStep
 	}
@@ -148,18 +146,23 @@ func (fb *FrameBuffer) Triangle(
 			betaZ := beta * z1rec
 			gammaZ := gamma * z2rec
 
-			// Interpolate the texture coordinates
-			zRec := alphaZ + betaZ + gammaZ
-			u := (alphaZ*u0 + betaZ*u1 + gammaZ*u2) / zRec
-			v := (alphaZ*v0 + betaZ*v1 + gammaZ*v2) / zRec
+			zRec := -(alphaZ + betaZ + gammaZ)
+			index := y*fb.Width + x
 
-			c := faceColor
-			if texture != nil {
-				c = texture.Sample(u, v)
+			if zRec >= fb.ZBuffer[index] {
+				// Interpolate the texture coordinates
+				u := (alphaZ*u0 + betaZ*u1 + gammaZ*u2) / zRec
+				v := (alphaZ*v0 + betaZ*v1 + gammaZ*v2) / zRec
+
+				c := faceColor
+				if texture != nil {
+					c = texture.Sample(u, v)
+				}
+
+				c = colorIntensity(c, intensity)
+				fb.ZBuffer[index] = zRec
+				fb.Pixels[index] = c
 			}
-
-			c = colorIntensity(c, intensity)
-			fb.Pixel(x, y, c, -zRec)
 		}
 	}
 }
@@ -177,21 +180,16 @@ func (fb *FrameBuffer) Triangle2(
 	minY, maxY := min(y0, y1, y2), max(y0, y1, y2)
 
 	// Clip the bounding box to the tile boundaries
-	minX, maxX = max(minX, tileStartX), min(maxX, tileEndX)
-	minY, maxY = max(minY, tileStartY), min(maxY, tileEndY)
+	minX, maxX = max(minX, tileStartX, 0), min(maxX, tileEndX, fb.Width-1)
+	minY, maxY = max(minY, tileStartY, 0), min(maxY, tileEndY, fb.Height-1)
 
 	// Ensure the intensity is in the range [0.2, 1.0]
 	intensity = max(0.2, min(intensity, 1.0))
 
-	// Precalculate edge function values for the triangle's edges
-	edge01 := func(x, y int) int { return (y0-y1)*x + (x1-x0)*y + (x0*y1 - x1*y0) }
-	edge12 := func(x, y int) int { return (y1-y2)*x + (x2-x1)*y + (x1*y2 - x2*y1) }
-	edge20 := func(x, y int) int { return (y2-y0)*x + (x0-x2)*y + (x2*y0 - x0*y2) }
-
 	// Calculate initial edge function values for the first pixel in the bounding box
-	f01 := edge01(minX, minY)
-	f12 := edge12(minX, minY)
-	f20 := edge20(minX, minY)
+	f01 := (y0-y1)*minX + (x1-x0)*minY + (x0*y1 - x1*y0)
+	f12 := (y1-y2)*minX + (x2-x1)*minY + (x1*y2 - x2*y1)
+	f20 := (y2-y0)*minX + (x0-x2)*minY + (x2*y0 - x0*y2)
 
 	// Calculate the change in the edge function values when moving one pixel to the right and down
 	f01dx := y0 - y1
@@ -236,18 +234,23 @@ func (fb *FrameBuffer) Triangle2(
 				beta := float64(fx20) / float64(fx12+fx20+fx01)
 				gamma := 1 - alpha - beta
 
-				// Interpolate depth and texture coordinates
-				zRec := alpha/z0 + beta/z1 + gamma/z2
-				u := (alpha*u0z0 + beta*u1z1 + gamma*u2z2) / zRec
-				v := (alpha*v0z0 + beta*v1z1 + gamma*v2z2) / zRec
+				zRec := -(alpha/z0 + beta/z1 + gamma/z2)
+				index := y*fb.Width + x
 
-				c := faceColor
-				if texture != nil {
-					c = texture.Sample(u, v)
+				if zRec >= fb.ZBuffer[index] {
+					// Interpolate texture coordinates
+					u := (alpha*u0z0 + beta*u1z1 + gamma*u2z2) / zRec
+					v := (alpha*v0z0 + beta*v1z1 + gamma*v2z2) / zRec
+
+					c := faceColor
+					if texture != nil {
+						c = texture.Sample(u, v)
+					}
+
+					c = colorIntensity(c, intensity)
+					fb.ZBuffer[index] = zRec
+					fb.Pixels[index] = c
 				}
-
-				c = colorIntensity(c, intensity)
-				fb.Pixel(x, y, c, -zRec)
 			}
 
 			fx01 += f01dx
@@ -324,17 +327,22 @@ func (fb *FrameBuffer) Triangle3(
 				}
 
 				t := float64(x-xStart) / float64(xEnd-xStart)
-				z := zStart + t*(zEnd-zStart)
-				u := uStart + t*(uEnd-uStart)
-				v := vStart + t*(vEnd-vStart)
+				z := -(zStart + t*(zEnd-zStart))
+				index := y*fb.Width + x
 
-				c := faceColor
-				if texture != nil {
-					c = texture.Sample(u, v)
+				if z >= fb.ZBuffer[index] {
+					u := uStart + t*(uEnd-uStart)
+					v := vStart + t*(vEnd-vStart)
+
+					c := faceColor
+					if texture != nil {
+						c = texture.Sample(u, v)
+					}
+
+					c = colorIntensity(c, intensity)
+					fb.ZBuffer[index] = z
+					fb.Pixels[index] = c
 				}
-
-				c = colorIntensity(c, intensity)
-				fb.Pixel(x, y, c, -z)
 			}
 		}
 	}
@@ -360,17 +368,22 @@ func (fb *FrameBuffer) Triangle3(
 				}
 
 				t := float64(x-xStart) / float64(xEnd-xStart)
-				z := zStart + t*(zEnd-zStart)
-				u := uStart + t*(uEnd-uStart)
-				v := vStart + t*(vEnd-vStart)
+				z := -(zStart + t*(zEnd-zStart))
+				index := y*fb.Width + x
 
-				c := faceColor
-				if texture != nil {
-					c = texture.Sample(u, v)
+				if z >= fb.ZBuffer[index] {
+					u := uStart + t*(uEnd-uStart)
+					v := vStart + t*(vEnd-vStart)
+
+					c := faceColor
+					if texture != nil {
+						c = texture.Sample(u, v)
+					}
+
+					c = colorIntensity(c, intensity)
+					fb.ZBuffer[index] = z
+					fb.Pixels[index] = c
 				}
-
-				c = colorIntensity(c, intensity)
-				fb.Pixel(x, y, c, -z)
 			}
 		}
 	}

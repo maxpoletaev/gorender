@@ -1,6 +1,8 @@
 package main
 
-import "math"
+import (
+	"math"
+)
 
 type Matrix [4][4]float64
 
@@ -157,7 +159,7 @@ func (m Matrix) Multiply(other Matrix) (res Matrix) {
 	return res
 }
 
-func (m Matrix) MultiplyVec4(v Vec4) Vec4 {
+func matrixMultiplyVec4(m *Matrix, v Vec4) Vec4 {
 	return Vec4{
 		X: m[0][0]*v.X + m[0][1]*v.Y + m[0][2]*v.Z + m[0][3]*v.W,
 		Y: m[1][0]*v.X + m[1][1]*v.Y + m[1][2]*v.Z + m[1][3]*v.W,
