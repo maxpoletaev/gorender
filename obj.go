@@ -17,20 +17,20 @@ type ObjMaterial struct {
 }
 
 type ObjContext struct {
-	Vertices        []Vec3
+	Vertices        []Vec4
 	Faces           []Face
 	TextureVertices []UV
 	Textures        map[string]*Texture
 }
 
-func parseVertex(line string) (Vec3, error) {
-	var x, y, z float64
+func parseVertex(line string) (Vec4, error) {
+	var x, y, z float32
 	_, err := fmt.Sscanf(line, "v %f %f %f", &x, &y, &z)
-	return Vec3{x, y, z}, err
+	return Vec4{x, y, z, 1}, err
 }
 
 func parseTextureVertex(line string) (UV, error) {
-	var x, y float64
+	var x, y float32
 	_, err := fmt.Sscanf(line, "vt %f %f", &x, &y)
 	return UV{x, y}, err
 }

@@ -18,8 +18,8 @@ const (
 
 type Texture struct {
 	width, height   int
-	widthF, heightF float64
-	scale           float64
+	widthF, heightF float32
+	scale           float32
 	color           color.RGBA
 	pixels          []color.RGBA
 	typ             TextureType
@@ -45,8 +45,8 @@ func NewImageTexture(img image.Image) (*Texture, error) {
 	t := &Texture{
 		width:   width,
 		height:  height,
-		widthF:  float64(width),
-		heightF: float64(height),
+		widthF:  float32(width),
+		heightF: float32(height),
 		pixels:  make([]color.RGBA, bounds.Dx()*bounds.Dy()),
 		typ:     typ,
 		scale:   1.0,
@@ -62,11 +62,11 @@ func NewImageTexture(img image.Image) (*Texture, error) {
 	return t, nil
 }
 
-func (t *Texture) SetScale(scale float64) {
+func (t *Texture) SetScale(scale float32) {
 	t.scale = scale
 }
 
-func (t *Texture) Sample(u, v float64) color.RGBA {
+func (t *Texture) Sample(u, v float32) color.RGBA {
 	switch t.typ {
 	case TextureTypeSolidColor:
 		return t.color

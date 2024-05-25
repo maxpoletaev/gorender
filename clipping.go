@@ -60,7 +60,7 @@ type Plane struct {
 	Normal Vec4
 }
 
-func (p *Plane) DistanceToVertex(v Vec4) float64 {
+func (p *Plane) DistanceToVertex(v Vec4) float32 {
 	return p.Normal.DotProduct(v) - p.Normal.DotProduct(p.Point)
 }
 
@@ -70,7 +70,7 @@ func (p *Plane) IsVertexInside(q Vec4) bool {
 }
 
 // Intersect returns a point between q0 and q1 intersect with the plane.
-func (p *Plane) Intersect(q0, q1 Vec4) (Vec4, float64) {
+func (p *Plane) Intersect(q0, q1 Vec4) (Vec4, float32) {
 	u := q1.Sub(q0)
 	w := q0.Sub(p.Point)
 	d := p.Normal.DotProduct(u)
@@ -84,7 +84,7 @@ type Frustum struct {
 	polygonPool *sync.Pool // *Polygon
 }
 
-func NewFrustum(zNear, zFar float64) *Frustum {
+func NewFrustum(zNear, zFar float32) *Frustum {
 	polygonPool := &sync.Pool{
 		New: func() any {
 			return &Polygon{}
@@ -147,7 +147,7 @@ func (f *Frustum) BoxVisibility(bbox *[8]Vec4) int {
 	return BoxVisibilityInside
 }
 
-func interpolateUV(a, b UV, factor float64) UV {
+func interpolateUV(a, b UV, factor float32) UV {
 	return UV{
 		U: a.U + (b.U-a.U)*factor,
 		V: a.V + (b.V-a.V)*factor,

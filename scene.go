@@ -13,14 +13,14 @@ type SceneMeshData struct {
 	ID           string  `json:"id"`
 	ObjFile      string  `json:"objFile"`
 	Texture      string  `json:"texture"`
-	TextureScale float64 `json:"textureScale"`
+	TextureScale float32 `json:"textureScale"`
 }
 
 type SceneObjectData struct {
 	MeshID   string     `json:"meshID"`
-	Position [3]float64 `json:"position"`
-	Rotation [3]float64 `json:"rotation"`
-	Scale    [3]float64 `json:"scale"`
+	Position [3]float32 `json:"position"`
+	Rotation [3]float32 `json:"rotation"`
+	Scale    [3]float32 `json:"scale"`
 }
 
 type SceneData struct {
@@ -114,7 +114,7 @@ func LoadSceneFile(filename string) (*Scene, error) {
 			return nil, fmt.Errorf("mesh id not found: %s", objData.MeshID)
 		}
 
-		if objData.Scale == [3]float64{0, 0, 0} {
+		if objData.Scale == [3]float32{0, 0, 0} {
 			log.Printf("[WARN] object scale is zero: %s", objData.MeshID)
 		}
 

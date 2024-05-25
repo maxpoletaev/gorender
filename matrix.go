@@ -1,10 +1,10 @@
 package main
 
 import (
-	"math"
+	"github.com/orsinium-labs/tinymath"
 )
 
-type Matrix [4][4]float64
+type Matrix [4][4]float32
 
 func NewIdentityMatrix() Matrix {
 	return Matrix{
@@ -15,7 +15,7 @@ func NewIdentityMatrix() Matrix {
 	}
 }
 
-func NewScaleMatrix(x, y, z float64) Matrix {
+func NewScaleMatrix(x, y, z float32) Matrix {
 	return Matrix{
 		{x, 0, 0, 0},
 		{0, y, 0, 0},
@@ -24,7 +24,7 @@ func NewScaleMatrix(x, y, z float64) Matrix {
 	}
 }
 
-func NewTranslationMatrix(x, y, z float64) Matrix {
+func NewTranslationMatrix(x, y, z float32) Matrix {
 	return Matrix{
 		{1, 0, 0, x},
 		{0, 1, 0, y},
@@ -33,12 +33,12 @@ func NewTranslationMatrix(x, y, z float64) Matrix {
 	}
 }
 
-func NewRotationXMatrix(angle float64) Matrix {
+func NewRotationXMatrix(angle float32) Matrix {
 	if angle == 0 {
 		return NewIdentityMatrix()
 	}
 
-	sin, cos := math.Sin(angle), math.Cos(angle)
+	sin, cos := tinymath.SinCos(angle)
 	return Matrix{
 		{1, 0, 0, 0},
 		{0, cos, -sin, 0},
@@ -47,12 +47,12 @@ func NewRotationXMatrix(angle float64) Matrix {
 	}
 }
 
-func NewRotationYMatrix(angle float64) Matrix {
+func NewRotationYMatrix(angle float32) Matrix {
 	if angle == 0 {
 		return NewIdentityMatrix()
 	}
 
-	sin, cos := math.Sin(angle), math.Cos(angle)
+	sin, cos := tinymath.SinCos(angle)
 	return Matrix{
 		{cos, 0, sin, 0},
 		{0, 1, 0, 0},
@@ -61,12 +61,12 @@ func NewRotationYMatrix(angle float64) Matrix {
 	}
 }
 
-func NewRotationZMatrix(angle float64) Matrix {
+func NewRotationZMatrix(angle float32) Matrix {
 	if angle == 0 {
 		return NewIdentityMatrix()
 	}
 
-	sin, cos := math.Sin(angle), math.Cos(angle)
+	sin, cos := tinymath.SinCos(angle)
 	return Matrix{
 		{cos, -sin, 0, 0},
 		{sin, cos, 0, 0},
@@ -75,7 +75,7 @@ func NewRotationZMatrix(angle float64) Matrix {
 	}
 }
 
-func NewRotationMatrix(x, y, z float64) Matrix {
+func NewRotationMatrix(x, y, z float32) Matrix {
 	m := NewIdentityMatrix()
 	m = m.Multiply(NewRotationXMatrix(x))
 	m = m.Multiply(NewRotationYMatrix(y))
@@ -93,8 +93,8 @@ func NewWorldMatrix(scale, rotation, translation Vec3) Matrix {
 
 // NewPerspectiveMatrix returns a perspective projection matrix that transforms
 // world coordinates to clip coordinates.
-func NewPerspectiveMatrix(fov, aspect, zNear, zFar float64) Matrix {
-	tanHalfFov := math.Tan(fov / 2.0)
+func NewPerspectiveMatrix(fov, aspect, zNear, zFar float32) Matrix {
+	tanHalfFov := tinymath.Tan(fov / 2.0)
 
 	m00 := 1 / (aspect * tanHalfFov)
 	m11 := 1 / tanHalfFov
@@ -110,8 +110,8 @@ func NewPerspectiveMatrix(fov, aspect, zNear, zFar float64) Matrix {
 }
 
 func NewScreenMatrix(width, height int) Matrix {
-	hw := float64(width) / 2
-	hh := float64(height) / 2
+	hw := float32(width) / 2
+	hh := float32(height) / 2
 
 	return Matrix{
 		{hw, 0, 0, hw},
@@ -159,7 +159,7 @@ func (m Matrix) Multiply(other Matrix) (res Matrix) {
 	return res
 }
 
-func matrixMultiplyVec4(m *Matrix, v Vec4) Vec4 {
+func matrixMultiplyVec4(m *Matrix, v *Vec4) Vec4 {
 	return Vec4{
 		X: m[0][0]*v.X + m[0][1]*v.Y + m[0][2]*v.Z + m[0][3]*v.W,
 		Y: m[1][0]*v.X + m[1][1]*v.Y + m[1][2]*v.Z + m[1][3]*v.W,

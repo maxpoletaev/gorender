@@ -28,7 +28,7 @@ type Triangle struct {
 	Points      [3]Vec4
 	UVs         [3]UV
 	Texture     *Texture
-	Intensity   float64
+	Intensity   float32
 	TileNumbers uint16
 }
 
@@ -48,7 +48,7 @@ type rasterizationTask struct {
 
 func calculateTileBoundaries(tile uint, numTiles uint, width, height int) (start, end Vec2) {
 	if numTiles == 1 {
-		return Vec2{0, 0}, Vec2{float64(width), float64(height)}
+		return Vec2{0, 0}, Vec2{float32(width), float32(height)}
 	}
 
 	var (
@@ -58,17 +58,17 @@ func calculateTileBoundaries(tile uint, numTiles uint, width, height int) (start
 		tileHeight = (uint(height) + numTilesY - 1) / numTilesY
 	)
 
-	start.X = float64((tile % numTilesX) * tileWidth)
-	start.Y = float64((tile / numTilesX) * tileHeight)
-	end.X = start.X + float64(tileWidth)
-	end.Y = start.Y + float64(tileHeight)
+	start.X = float32((tile % numTilesX) * tileWidth)
+	start.Y = float32((tile / numTilesX) * tileHeight)
+	end.X = start.X + float32(tileWidth)
+	end.Y = start.Y + float32(tileHeight)
 
-	if end.X > float64(width) {
-		end.X = float64(width)
+	if end.X > float32(width) {
+		end.X = float32(width)
 	}
 
-	if end.Y > float64(height) {
-		end.Y = float64(height)
+	if end.Y > float32(height) {
+		end.Y = float32(height)
 	}
 
 	return start, end
@@ -82,9 +82,9 @@ type LocalBuffer struct {
 type Renderer struct {
 	fb               *FrameBuffer
 	frustum          *Frustum
-	aspectX, aspectY float64
-	zNear, zFar      float64
-	fovX, fovY       float64
+	aspectX, aspectY float32
+	zNear, zFar      float32
+	fovX, fovY       float32
 
 	FrustumClipping bool
 	ShowVertices    bool
@@ -109,13 +109,13 @@ type Renderer struct {
 }
 
 func NewRenderer(fb *FrameBuffer) *Renderer {
-	aspectX := float64(fb.Width) / float64(fb.Height)
-	aspectY := float64(fb.Height) / float64(fb.Width)
+	aspectX := float32(fb.Width) / float32(fb.Height)
+	aspectY := float32(fb.Height) / float32(fb.Width)
 
-	fovY := 45 * (math.Pi / 180)
-	fovX := 2 * math.Atan(math.Tan(fovY/2)*aspectX)
+	fovY := float32(45 * (math.Pi / 180))
+	fovX := float32(2 * math.Atan(math.Tan(float64(fovY/2))*float64(aspectX)))
 
-	zNear, zFar := 0.0, 50.0
+	zNear, zFar := float32(0.0), float32(50.0)
 	frustum := NewFrustum(zNear, zFar)
 
 	localBufPool := &sync.Pool{
@@ -258,7 +258,7 @@ func (r *Renderer) projectObject(object *Object, camera *Camera) {
 
 	// Apply transformations to the bounding box
 	for i := 0; i < 8; i++ {
-		bbox[i] = matrixMultiplyVec4(&mvpMatrix, bbox[i])
+		bbox[i] = matrixMultiplyVec4(&mvpMatrix, &bbox[i])
 	}
 
 	// Quick check if the object is inside the frustum
@@ -291,9 +291,9 @@ func (r *Renderer) projectObject(object *Object, camera *Camera) {
 	for fi := range object.Faces {
 		face := &object.Faces[fi] // avoid face copy
 
-		points[0] = matrixMultiplyVec4(&mvpMatrix, object.Vertices[face.A].ToVec4())
-		points[1] = matrixMultiplyVec4(&mvpMatrix, object.Vertices[face.B].ToVec4())
-		points[2] = matrixMultiplyVec4(&mvpMatrix, object.Vertices[face.C].ToVec4())
+		points[0] = matrixMultiplyVec4(&mvpMatrix, &object.Vertices[face.A])
+		points[1] = matrixMultiplyVec4(&mvpMatrix, &object.Vertices[face.B])
+		points[2] = matrixMultiplyVec4(&mvpMatrix, &object.Vertices[face.C])
 
 		// Calculate the face normal (cross product of two edges)
 		v0, v1, v2 := points[0].ToVec3(), points[1].ToVec3(), points[2].ToVec3()
@@ -308,14 +308,14 @@ func (r *Renderer) projectObject(object *Object, camera *Camera) {
 
 		// Normalize for lighting calculations
 		faceNormal = faceNormal.Normalize()
-		lightIntensity := 0.5
+		lightIntensity := float32(0.5)
 
 		if r.Lighting {
 			const (
 				ambientStrength = 0.5
 				diffuseStrength = 0.5
 			)
-			diffuse := math.Max(faceNormal.DotProduct(lightDirection), 0.0) * diffuseStrength
+			diffuse := max(faceNormal.DotProduct(lightDirection), 0.0) * diffuseStrength
 			lightIntensity = ambientStrength + diffuse
 		}
 
@@ -334,7 +334,7 @@ func (r *Renderer) projectObject(object *Object, camera *Camera) {
 			for j, v := range newPoints {
 				origW := v.W
 				v = v.Divide(v.W) // perspective divide
-				v = matrixMultiplyVec4(&screenMatrix, v)
+				v = matrixMultiplyVec4(&screenMatrix, &v)
 				v.W = origW // need the original W for texture mapping
 				newPoints[j] = v
 			}

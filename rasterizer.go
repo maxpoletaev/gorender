@@ -7,7 +7,7 @@ import (
 type FrameBuffer struct {
 	Width   int
 	Height  int
-	ZBuffer []float64
+	ZBuffer []float32
 	Pixels  []color.RGBA
 	Pixels2 []color.RGBA
 }
@@ -18,7 +18,7 @@ func NewFrameBuffer(width, height int) *FrameBuffer {
 		Height:  height,
 		Pixels:  make([]color.RGBA, width*height),
 		Pixels2: make([]color.RGBA, width*height),
-		ZBuffer: make([]float64, width*height),
+		ZBuffer: make([]float32, width*height),
 	}
 }
 
@@ -67,9 +67,9 @@ func (fb *FrameBuffer) Line(x0, y0 int, x1, y1 int, c color.RGBA) {
 	dy := y1 - y0
 
 	sideLength := max(abs(dx), abs(dy))
-	xStep := float64(dx) / float64(sideLength)
-	yStep := float64(dy) / float64(sideLength)
-	curX, curY := float64(x0), float64(y0)
+	xStep := float32(dx) / float32(sideLength)
+	yStep := float32(dy) / float32(sideLength)
+	curX, curY := float32(x0), float32(y0)
 
 	for i := 0; i <= sideLength; i++ {
 		fb.Pixel(int(curX), int(curY), c)
@@ -78,22 +78,22 @@ func (fb *FrameBuffer) Line(x0, y0 int, x1, y1 int, c color.RGBA) {
 	}
 }
 
-func colorIntensity(c color.RGBA, intensity float64) color.RGBA {
+func colorIntensity(c color.RGBA, intensity float32) color.RGBA {
 	return color.RGBA{
-		R: uint8(float64(c.R) * intensity),
-		G: uint8(float64(c.G) * intensity),
-		B: uint8(float64(c.B) * intensity),
+		R: uint8(float32(c.R) * intensity),
+		G: uint8(float32(c.G) * intensity),
+		B: uint8(float32(c.B) * intensity),
 		A: c.A,
 	}
 }
 
 func (fb *FrameBuffer) Triangle(
-	x0, y0 int, z0 float64, u0, v0 float64,
-	x1, y1 int, z1 float64, u1, v1 float64,
-	x2, y2 int, z2 float64, u2, v2 float64,
+	x0, y0 int, z0 float32, u0, v0 float32,
+	x1, y1 int, z1 float32, u1, v1 float32,
+	x2, y2 int, z2 float32, u2, v2 float32,
 	tileStartX, tileStartY, tileEndX, tileEndY int,
 	texture *Texture,
-	intensity float64,
+	intensity float32,
 ) {
 	// Find the bounding box of the triangle
 	minX, maxX := min(x0, x1, x2), max(x0, x1, x2)
@@ -107,7 +107,7 @@ func (fb *FrameBuffer) Triangle(
 	intensity = max(0.2, min(intensity, 1.0))
 
 	// Find the area of the triangle
-	area := float64((y1-y2)*(x0-x2) + (x2-x1)*(y0-y2))
+	area := float32((y1-y2)*(x0-x2) + (x2-x1)*(y0-y2))
 	areaRec := 1 / area
 
 	// Precalculate factors for barycentric coordinates
@@ -119,8 +119,8 @@ func (fb *FrameBuffer) Triangle(
 	)
 
 	// Calculate the barycentric coordinate deltas
-	alphaDx := float64(f1) * areaRec
-	betaDx := float64(f3) * areaRec
+	alphaDx := float32(f1) * areaRec
+	betaDx := float32(f3) * areaRec
 
 	// Depth reciprocals for texture mapping
 	z0rec, z1rec, z2rec := 1/z0, 1/z1, 1/z2
@@ -128,13 +128,13 @@ func (fb *FrameBuffer) Triangle(
 	// Iterate through the bounding box and check if the pixel
 	// is inside the triangle using barycentric coordinates.
 	for y := minY; y <= maxY; y++ {
-		alphaRow := float64(f1*(minX-x2)+f2*(y-y2)) * areaRec
-		betaRow := float64(f3*(minX-x2)+f4*(y-y2)) * areaRec
+		alphaRow := float32(f1*(minX-x2)+f2*(y-y2)) * areaRec
+		betaRow := float32(f3*(minX-x2)+f4*(y-y2)) * areaRec
 
 		for x := minX; x <= maxX; x++ {
 			// Compute barycentric coordinates for x, y
-			alpha := alphaRow + alphaDx*float64(x-minX)
-			beta := betaRow + betaDx*float64(x-minX)
+			alpha := alphaRow + alphaDx*float32(x-minX)
+			beta := betaRow + betaDx*float32(x-minX)
 			gamma := 1 - alpha - beta
 
 			// Skip rendering if pixel is outside the triangle
@@ -168,12 +168,12 @@ func (fb *FrameBuffer) Triangle(
 }
 
 func (fb *FrameBuffer) Triangle2(
-	x0, y0 int, z0 float64, u0, v0 float64,
-	x1, y1 int, z1 float64, u1, v1 float64,
-	x2, y2 int, z2 float64, u2, v2 float64,
+	x0, y0 int, z0 float32, u0, v0 float32,
+	x1, y1 int, z1 float32, u1, v1 float32,
+	x2, y2 int, z2 float32, u2, v2 float32,
 	tileStartX, tileStartY, tileEndX, tileEndY int,
 	texture *Texture,
-	intensity float64,
+	intensity float32,
 ) {
 	// Find the bounding box of the triangle
 	minX, maxX := min(x0, x1, x2), max(x0, x1, x2)
@@ -199,7 +199,7 @@ func (fb *FrameBuffer) Triangle2(
 	f20dx := y2 - y0
 	f20dy := x0 - x2
 
-	// Apply top-left rule adjustment for the edge functions
+	// Top-left rule adjustment for the edge functions
 	edgeAdjust := func(f, dx, dy int) int {
 		if dy > 0 || (dy == 0 && dx > 0) {
 			return f
@@ -207,7 +207,6 @@ func (fb *FrameBuffer) Triangle2(
 		return f - 1
 	}
 
-	// Adjust the initial edge function values based on the top-left rule
 	f01 = edgeAdjust(f01, f01dx, f01dy)
 	f12 = edgeAdjust(f12, f12dx, f12dy)
 	f20 = edgeAdjust(f20, f20dx, f20dy)
@@ -230,8 +229,8 @@ func (fb *FrameBuffer) Triangle2(
 			// Check if the point is inside the triangle using the edge function values
 			if fx01 < 0 && fx12 < 0 && fx20 < 0 {
 				// Compute barycentric coordinates for x, y
-				alpha := float64(fx12) / float64(fx12+fx20+fx01)
-				beta := float64(fx20) / float64(fx12+fx20+fx01)
+				alpha := float32(fx12) / float32(fx12+fx20+fx01)
+				beta := float32(fx20) / float32(fx12+fx20+fx01)
 				gamma := 1 - alpha - beta
 
 				zRec := -(alpha/z0 + beta/z1 + gamma/z2)
@@ -267,11 +266,11 @@ func (fb *FrameBuffer) Triangle2(
 func interpolate(
 	y, y0, y1 int,
 	x0, x1 int,
-	z0rec, z1rec float64,
-	u0, u1, v0, v1 float64,
-) (int, float64, float64, float64) {
-	t := float64(y-y0) / float64(y1-y0)
-	x := int(float64(x0) + t*float64(x1-x0))
+	z0rec, z1rec float32,
+	u0, u1, v0, v1 float32,
+) (int, float32, float32, float32) {
+	t := float32(y-y0) / float32(y1-y0)
+	x := int(float32(x0) + t*float32(x1-x0))
 	z := z0rec + t*(z1rec-z0rec)
 	u := u0 + t*(u1-u0)
 	v := v0 + t*(v1-v0)
@@ -279,12 +278,12 @@ func interpolate(
 }
 
 func (fb *FrameBuffer) Triangle3(
-	x0, y0 int, z0 float64, u0, v0 float64,
-	x1, y1 int, z1 float64, u1, v1 float64,
-	x2, y2 int, z2 float64, u2, v2 float64,
+	x0, y0 int, z0 float32, u0, v0 float32,
+	x1, y1 int, z1 float32, u1, v1 float32,
+	x2, y2 int, z2 float32, u2, v2 float32,
 	tileStartX, tileStartY, tileEndX, tileEndY int,
 	texture *Texture,
-	intensity float64,
+	intensity float32,
 ) {
 	// Sort vertices by y-coordinate
 	if y0 > y1 {
@@ -326,7 +325,7 @@ func (fb *FrameBuffer) Triangle3(
 					continue
 				}
 
-				t := float64(x-xStart) / float64(xEnd-xStart)
+				t := float32(x-xStart) / float32(xEnd-xStart)
 				z := -(zStart + t*(zEnd-zStart))
 				index := y*fb.Width + x
 
@@ -367,7 +366,7 @@ func (fb *FrameBuffer) Triangle3(
 					continue
 				}
 
-				t := float64(x-xStart) / float64(xEnd-xStart)
+				t := float32(x-xStart) / float32(xEnd-xStart)
 				z := -(zStart + t*(zEnd-zStart))
 				index := y*fb.Width + x
 
@@ -389,15 +388,15 @@ func (fb *FrameBuffer) Triangle3(
 	}
 }
 
-func blendRGBA(a, b color.RGBA, f float64) color.RGBA {
-	cr := uint8(float64(a.R)*(1-f) + float64(b.R)*f)
-	cg := uint8(float64(a.G)*(1-f) + float64(b.G)*f)
-	cb := uint8(float64(a.B)*(1-f) + float64(b.B)*f)
-	ca := uint8(float64(a.A)*(1-f) + float64(b.A)*f)
+func blendRGBA(a, b color.RGBA, f float32) color.RGBA {
+	cr := uint8(float32(a.R)*(1-f) + float32(b.R)*f)
+	cg := uint8(float32(a.G)*(1-f) + float32(b.G)*f)
+	cb := uint8(float32(a.B)*(1-f) + float32(b.B)*f)
+	ca := uint8(float32(a.A)*(1-f) + float32(b.A)*f)
 	return color.RGBA{cr, cg, cb, ca}
 }
 
-func (fb *FrameBuffer) Fog(fogStart, fogEnd float64, c color.RGBA) {
+func (fb *FrameBuffer) Fog(fogStart, fogEnd float32, c color.RGBA) {
 	for i := range fb.Pixels {
 		depth := fb.ZBuffer[i]
 

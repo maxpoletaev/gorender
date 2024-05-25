@@ -6,7 +6,7 @@ import (
 )
 
 type UV struct {
-	U, V float64
+	U, V float32
 }
 
 type Face struct {
@@ -18,12 +18,12 @@ type Face struct {
 
 type Mesh struct {
 	Name        string
-	Vertices    []Vec3
+	Vertices    []Vec4
 	Faces       []Face
 	BoundingBox [8]Vec4
 }
 
-func boundingBox(vertices []Vec3) [8]Vec4 {
+func boundingBox(vertices []Vec4) [8]Vec4 {
 	minX, minY, minZ := vertices[0].X, vertices[0].Y, vertices[0].Z
 	maxX, maxY, maxZ := minX, minY, minZ
 
@@ -48,7 +48,7 @@ func boundingBox(vertices []Vec3) [8]Vec4 {
 	}
 }
 
-func NewMesh(vertices []Vec3, faces []Face) *Mesh {
+func NewMesh(vertices []Vec4, faces []Face) *Mesh {
 	return &Mesh{
 		Faces:       faces,
 		Vertices:    vertices,

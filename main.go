@@ -265,8 +265,8 @@ func main() {
 		deltaY := cursorY - lastCursorY
 
 		if deltaX != 0 || deltaY != 0 {
-			yaw := -float64(deltaX) * 0.002
-			pitch := -float64(deltaY) * 0.002
+			yaw := -float32(deltaX) * 0.002
+			pitch := -float32(deltaY) * 0.002
 			yawQuaternion := NewQuaternionFromAxisAngle(camera.Up, yaw)
 			pitchQuaternion := NewQuaternionFromAxisAngle(right, pitch)
 			camera.Direction = yawQuaternion.Rotate(camera.Direction).Normalize()

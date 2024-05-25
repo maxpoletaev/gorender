@@ -1,15 +1,15 @@
 package main
 
-import "math"
+import (
+	"github.com/orsinium-labs/tinymath"
+)
 
 type Quaternion struct {
-	X, Y, Z, W float64
+	X, Y, Z, W float32
 }
 
-func NewQuaternionFromAxisAngle(axis Vec3, angle float64) Quaternion {
-	sin := math.Sin(angle / 2)
-	cos := math.Cos(angle / 2)
-
+func NewQuaternionFromAxisAngle(axis Vec3, angle float32) Quaternion {
+	sin, cos := tinymath.SinCos(angle / 2)
 	return Quaternion{
 		X: axis.X * sin,
 		Y: axis.Y * sin,
