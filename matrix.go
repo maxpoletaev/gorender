@@ -1,9 +1,5 @@
 package main
 
-import (
-	"github.com/orsinium-labs/tinymath"
-)
-
 type Matrix [4][4]float32
 
 func NewIdentityMatrix() Matrix {
@@ -38,7 +34,7 @@ func NewRotationXMatrix(angle float32) Matrix {
 		return NewIdentityMatrix()
 	}
 
-	sin, cos := tinymath.SinCos(angle)
+	sin, cos := sin32(angle), cos32(angle)
 	return Matrix{
 		{1, 0, 0, 0},
 		{0, cos, -sin, 0},
@@ -52,7 +48,7 @@ func NewRotationYMatrix(angle float32) Matrix {
 		return NewIdentityMatrix()
 	}
 
-	sin, cos := tinymath.SinCos(angle)
+	sin, cos := sin32(angle), cos32(angle)
 	return Matrix{
 		{cos, 0, sin, 0},
 		{0, 1, 0, 0},
@@ -66,7 +62,7 @@ func NewRotationZMatrix(angle float32) Matrix {
 		return NewIdentityMatrix()
 	}
 
-	sin, cos := tinymath.SinCos(angle)
+	sin, cos := sin32(angle), cos32(angle)
 	return Matrix{
 		{cos, -sin, 0, 0},
 		{sin, cos, 0, 0},
@@ -94,7 +90,7 @@ func NewWorldMatrix(scale, rotation, translation Vec3) Matrix {
 // NewPerspectiveMatrix returns a perspective projection matrix that transforms
 // world coordinates to clip coordinates.
 func NewPerspectiveMatrix(fov, aspect, zNear, zFar float32) Matrix {
-	tanHalfFov := tinymath.Tan(fov / 2.0)
+	tanHalfFov := tan32(fov / 2.0)
 
 	m00 := 1 / (aspect * tanHalfFov)
 	m11 := 1 / tanHalfFov

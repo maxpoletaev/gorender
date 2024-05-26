@@ -4,23 +4,6 @@ TEST_PACKAGE = ./...
 PWD = $(shell pwd)
 GO_MODULE = github.com/maxpoletaev/goxgl
 COMMIT_HASH = $(shell git rev-parse --short HEAD)
-C2GOASM_CLANG_FLAGS=-masm=intel -mno-red-zone -mstackrealign -mllvm -inline-threshold=1000 -fno-asynchronous-unwind-tables -fno-exceptions -fno-rtti
-
-.PHONY: goat_docker_build
-goat_docker_build: ## build goat docker image
-	@echo "--------- running: $@ ---------"
-	docker build -t goat -f goat.Dockerfile .
-
-.PHONY: goat_docker_run
-goat_docker_run: ## run goat
-	@echo "--------- running: $@ ---------"
-	docker run --rm -v $(PWD):/src goat make asm
-
-.PHONY: asm
-asm: ## generate assembly
-	@echo "--------- running: $@ ---------"
-	clang $(C2GOASM_CLANG_FLAGS) -O3 -mavx2 -S -o tmp.s matrix_avx256.c
-	c2goasm -a tmp.s matrix_avx256.s
 
 .PHONY: help
 help: ## print help (this message)
@@ -43,7 +26,6 @@ PHONY: test
 test: ## run tests
 	@echo "--------- running: $@ ---------"
 	@go test -v $(TEST_PACKAGE)
-
 
 .PHONY: bench
 bench: ## run benchmarks

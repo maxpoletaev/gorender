@@ -1,9 +1,5 @@
 package main
 
-import (
-	"github.com/orsinium-labs/tinymath"
-)
-
 type Vec2 struct {
 	X, Y float32
 }
@@ -84,7 +80,7 @@ func (v Vec3) Normalize() Vec3 {
 }
 
 func (v Vec3) ToRadians() Vec3 {
-	f := tinymath.Pi / 180
+	f := pi32 / 180
 	return Vec3{v.X * f, v.Y * f, v.Z * f}
 }
 
