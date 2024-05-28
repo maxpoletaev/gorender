@@ -254,12 +254,14 @@ func (r *Renderer) projectObject(object *Object, camera *Camera) {
 
 	screenMatrix := NewScreenMatrix(r.fb.Width, r.fb.Height)
 	lightDirection := Vec3{Y: 0.5, Z: -1}.Normalize()
+
 	bbox := object.BoundingBox
+	matrixMultiplyVec4Batch(&mvpMatrix, bbox[:])
 
 	// Apply transformations to the bounding box
-	for i := 0; i < 8; i++ {
-		bbox[i] = matrixMultiplyVec4(&mvpMatrix, &bbox[i])
-	}
+	//for i := 0; i < 8; i++ {
+	//	bbox[i] = matrixMultiplyVec4(&mvpMatrix, &bbox[i])
+	//}
 
 	// Quick check if the object is inside the frustum
 	boxVisibility := r.frustum.BoxVisibility(&bbox)
@@ -273,7 +275,7 @@ func (r *Renderer) projectObject(object *Object, camera *Camera) {
 
 		// New points after frustum clipping
 		clipPoints [maxClipPoints][3]Vec4
-		clipUVs    [maxClipPoints][3]UV
+		clipUV     [maxClipPoints][3]UV
 		clipCount  int
 	)
 
@@ -288,12 +290,16 @@ func (r *Renderer) projectObject(object *Object, camera *Camera) {
 		tileTriangleCount[i] = 0
 	}
 
+	// Transform the vertices to clip space
+	copy(object.Transformed, object.Vertices)
+	matrixMultiplyVec4Batch(&mvpMatrix, object.Transformed)
+
 	for fi := range object.Faces {
 		face := &object.Faces[fi] // avoid face copy
 
-		points[0] = matrixMultiplyVec4(&mvpMatrix, &object.Vertices[face.A])
-		points[1] = matrixMultiplyVec4(&mvpMatrix, &object.Vertices[face.B])
-		points[2] = matrixMultiplyVec4(&mvpMatrix, &object.Vertices[face.C])
+		points[0] = object.Transformed[face.A]
+		points[1] = object.Transformed[face.B]
+		points[2] = object.Transformed[face.C]
 
 		// Calculate the face normal (cross product of two edges)
 		v0, v1, v2 := points[0].ToVec3(), points[1].ToVec3(), points[2].ToVec3()
@@ -315,16 +321,17 @@ func (r *Renderer) projectObject(object *Object, camera *Camera) {
 				ambientStrength = 0.5
 				diffuseStrength = 0.5
 			)
+
 			diffuse := max(faceNormal.DotProduct(lightDirection), 0.0) * diffuseStrength
 			lightIntensity = ambientStrength + diffuse
 		}
 
 		if r.FrustumClipping && boxVisibility != BoxVisibilityInside {
 			uvs := [3]UV{face.UVa, face.UVb, face.UVc}
-			clipCount = r.frustum.ClipTriangle(&points, &uvs, &clipPoints, &clipUVs)
+			clipCount = r.frustum.ClipTriangle(&points, &uvs, &clipPoints, &clipUV)
 		} else {
 			clipPoints[0] = [3]Vec4{points[0], points[1], points[2]}
-			clipUVs[0] = [3]UV{face.UVa, face.UVb, face.UVc}
+			clipUV[0] = [3]UV{face.UVa, face.UVb, face.UVc}
 			clipCount = 1
 		}
 
@@ -341,7 +348,7 @@ func (r *Renderer) projectObject(object *Object, camera *Camera) {
 
 			triangle := Triangle{
 				Points:      newPoints,
-				UVs:         clipUVs[i],
+				UVs:         clipUV[i],
 				Texture:     face.Texture,
 				Intensity:   lightIntensity,
 				TileNumbers: r.identifyTriangleTiles(&newPoints),

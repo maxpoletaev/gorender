@@ -14,7 +14,12 @@ help: ## print help (this message)
 .PHONY: build
 build: ## build binary
 	@echo "--------- running: $@ ---------"
-	GOARCH=amd64 CGO_ENABLED=1 GODEBUG=cgocheck=0 go build -o=goxgl -pgo=default.pgo
+	CGO_ENABLED=1 GODEBUG=cgocheck=0 go build -o=goxgl -pgo=default.pgo
+
+.PHONY: build_noasm
+build_noasm: ## build without assembly
+	@echo "--------- running: $@ ---------"
+	CGO_ENABLED=1 GODEBUG=cgocheck=0 go build -o=goxgl -tags=noasm -pgo=default.pgo
 
 .PHONY: build
 build_debug: ## build with additional checks

@@ -50,6 +50,10 @@ options like wireframe, texturing, backface culling, etc.
 * [60005/70090 Computer Graphics lectures](https://wp.doc.ic.ac.uk/bkainz/teaching/60005-co317-computer-graphics/) by Bernhard Kainz at Imperial College London
 * [Optimizing Software Occlusion Culling](https://fgiesen.wordpress.com/2013/02/17/optimizing-sw-occlusion-culling-index/) series by Fabian Giesen
 * [Alias/WaveFront Object (.obj) File Format](https://people.computing.clemson.edu/~dhouse/courses/405/docs/brief-obj-file-format.html)
+* [Go assembly language complementary reference](https://www.quasilyte.dev/blog/post/go-asm-complementary-reference/) by Iskander Sharipov
+
+## Assets
+
 * [Doom E1M1: Hangar - Map (.obj)](https://sketchfab.com/3d-models/doom-e1m1-hangar-map-2148fb6a3fe7454b901fcea67d70b318) by pancakesbassoondonut
 * [16x16 pixel textures](https://piiixl.itch.io/textures) by PiiiXL
 

@@ -61,12 +61,14 @@ type Object struct {
 	Rotation    Vec3
 	Translation Vec3
 	Scale       Vec3
+	Transformed []Vec4
 }
 
 func NewObject(mesh *Mesh) *Object {
 	return &Object{
-		Mesh:  mesh,
-		Scale: Vec3{1, 1, 1},
+		Mesh:        mesh,
+		Scale:       Vec3{1, 1, 1},
+		Transformed: make([]Vec4, len(mesh.Vertices)),
 	}
 }
 
