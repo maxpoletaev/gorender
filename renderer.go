@@ -25,11 +25,10 @@ type Camera struct {
 
 // Triangle is a 2D projection of a Face.
 type Triangle struct {
-	Points      [3]Vec4
-	UVs         [3]UV
-	Texture     *Texture
-	Intensity   float32
-	TileNumbers uint16
+	Points    [3]Vec4
+	UVs       [3]UV
+	Texture   *Texture
+	Intensity float32
 }
 
 type DebugInfo struct {
@@ -219,7 +218,7 @@ func (r *Renderer) renderTile(tile uint) {
 }
 
 // identifyTriangleTiles returns a bitfield of tile numbers that the triangle is visible in.
-func (r *Renderer) identifyTriangleTiles(points *[3]Vec4) (tileNums uint16) {
+func (r *Renderer) identifyTriangleTiles(points *[3]Vec4, tileNums *[maxTiles]uint8) (n int) {
 	var (
 		// Triangle bounding box
 		minX = min(points[0].X, points[1].X, points[2].X)
@@ -230,14 +229,13 @@ func (r *Renderer) identifyTriangleTiles(points *[3]Vec4) (tileNums uint16) {
 
 	for i := uint(0); i < r.numTiles; i++ {
 		start, end := &r.tileBounds[i][0], &r.tileBounds[i][1]
-		if maxX < start.X || minX > end.X || maxY < start.Y || minY > end.Y {
-			continue
+		if maxX >= start.X && minX <= end.X && maxY >= start.Y && minY <= end.Y {
+			tileNums[n] = uint8(i)
+			n++
 		}
-
-		tileNums |= 1 << i
 	}
 
-	return tileNums
+	return n
 }
 
 // projectObject projects the object to the screen space. Object’s Face projections are
@@ -255,13 +253,9 @@ func (r *Renderer) projectObject(object *Object, camera *Camera) {
 	screenMatrix := NewScreenMatrix(r.fb.Width, r.fb.Height)
 	lightDirection := Vec3{Y: 0.5, Z: -1}.Normalize()
 
+	// Transform the bounding box to clip space
 	bbox := object.BoundingBox
 	matrixMultiplyVec4Batch(&mvpMatrix, bbox[:])
-
-	// Apply transformations to the bounding box
-	//for i := 0; i < 8; i++ {
-	//	bbox[i] = matrixMultiplyVec4(&mvpMatrix, &bbox[i])
-	//}
 
 	// Quick check if the object is inside the frustum
 	boxVisibility := r.frustum.BoxVisibility(&bbox)
@@ -271,7 +265,8 @@ func (r *Renderer) projectObject(object *Object, camera *Camera) {
 
 	var (
 		// Original triangle points
-		points [3]Vec4
+		tileNums [maxTiles]uint8
+		points   [3]Vec4
 
 		// New points after frustum clipping
 		clipPoints [maxClipPoints][3]Vec4
@@ -326,6 +321,7 @@ func (r *Renderer) projectObject(object *Object, camera *Camera) {
 			lightIntensity = ambientStrength + diffuse
 		}
 
+		// Clip triangles if object is not fully inside the frustum
 		if r.FrustumClipping && boxVisibility != BoxVisibilityInside {
 			uvs := [3]UV{face.UVa, face.UVb, face.UVc}
 			clipCount = r.frustum.ClipTriangle(&points, &uvs, &clipPoints, &clipUV)
@@ -336,37 +332,45 @@ func (r *Renderer) projectObject(object *Object, camera *Camera) {
 		}
 
 		for i := 0; i < clipCount; i++ {
-			newPoints := clipPoints[i]
+			screenPoints := clipPoints[i]
 
-			for j, v := range newPoints {
-				origW := v.W
-				v = v.Divide(v.W) // perspective divide
-				v = matrixMultiplyVec4(&screenMatrix, &v)
-				v.W = origW // need the original W for texture mapping
-				newPoints[j] = v
+			// Perspective divide
+			for j := range screenPoints {
+				screenPoints[j].X /= screenPoints[j].W
+				screenPoints[j].Y /= screenPoints[j].W
+				screenPoints[j].Z /= screenPoints[j].W
+				screenPoints[j].W = 1
+			}
+
+			// Transform to the screen space
+			matrixMultiplyVec4Batch(&screenMatrix, screenPoints[:])
+
+			// Restore the original W for texture mapping
+			for j := range screenPoints {
+				screenPoints[j].W = clipPoints[i][j].W
 			}
 
 			triangle := Triangle{
-				Points:      newPoints,
-				UVs:         clipUV[i],
-				Texture:     face.Texture,
-				Intensity:   lightIntensity,
-				TileNumbers: r.identifyTriangleTiles(&newPoints),
+				Points:    screenPoints,
+				UVs:       clipUV[i],
+				Texture:   face.Texture,
+				Intensity: lightIntensity,
 			}
 
-			for tile := uint(0); tile < r.numTiles; tile++ {
-				if triangle.TileNumbers&(1<<tile) != 0 {
-					// Add triangle to the corresponding local tile buffer
-					tileTriangles[tile][tileTriangleCount[tile]] = triangle
-					tileTriangleCount[tile]++
+			// Identify the tiles that the triangle is visible in
+			for n := range r.identifyTriangleTiles(&screenPoints, &tileNums) {
+				tile := tileNums[n]
 
-					// Flush local buffer to the global buffer once it's full
-					if tileTriangleCount[tile] == len(tileTriangles[tile]) {
-						r.tileLocks[tile].Lock()
-						r.tileTriangles[tile] = append(r.tileTriangles[tile], tileTriangles[tile][:]...)
-						r.tileLocks[tile].Unlock()
-						tileTriangleCount[tile] = 0
-					}
+				// Add triangle to the corresponding local tile buffer
+				tileTriangles[tile][tileTriangleCount[tile]] = triangle
+				tileTriangleCount[tile]++
+
+				// Flush local buffer to the global buffer once it's full
+				if tileTriangleCount[tile] == len(tileTriangles[tile]) {
+					r.tileLocks[tile].Lock()
+					r.tileTriangles[tile] = append(r.tileTriangles[tile], tileTriangles[tile][:]...)
+					r.tileLocks[tile].Unlock()
+					tileTriangleCount[tile] = 0
 				}
 			}
 		}

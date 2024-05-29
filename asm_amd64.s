@@ -1,16 +1,23 @@
+//go:build amd64 && !purego
+
 #include "textflag.h"
 #include "go_asm.h"
 
 // func func _matrixMultiplyVec4SSE(mat *Matrix, vecs []Vec4)
 TEXT ·_matrixMultiplyVec4SSE(SB), $0-32
 	MOVQ mat+0(FP), SI        // SI = mat
-	MOVQ vecs_base+8(FP), DI  // DI = arr
+	MOVQ vecs_base+8(FP), DI  // DI = vecs
 	MOVQ vecs_len+16(FP), CX  // CX = size
-	XORQ AX, AX               // i = 0
+	XORQ AX, AX               // Current index
 
 	// Exit if size is 0
 	CMPQ AX, CX
 	JE end
+
+	MOVUPS 0(SI), X4       // XMM4 = Matrix[0]
+	MOVUPS 16(SI), X5      // XMM5 = Matrix[1]
+	MOVUPS 32(SI), X6      // XMM6 = Matrix[2]
+	MOVUPS 48(SI), X7      // XMM7 = Matrix[3]
 
 loop:
 	MOVSS Vec4_X(DI), X0   // XMM0 = Vec4.X
@@ -18,15 +25,10 @@ loop:
 	MOVSS Vec4_Z(DI), X2   // XMM2 = Vec4.Z
 	MOVSS Vec4_W(DI), X3   // XMM3 = Vec4.W
 
-	SHUFPS $0x00, X0, X0   // Broadcast vec4[0] across XMM0
-	SHUFPS $0x00, X1, X1   // Broadcast vec4[1] across XMM1
-	SHUFPS $0x00, X2, X2   // Broadcast vec4[2] across XMM2
-	SHUFPS $0x00, X3, X3   // Broadcast vec4[3] across XMM3
-
-	MOVUPS 0(SI), X4       // XMM4 = Matrix[0]
-	MOVUPS 16(SI), X5      // XMM5 = Matrix[1]
-	MOVUPS 32(SI), X6      // XMM6 = Matrix[2]
-	MOVUPS 48(SI), X7      // XMM7 = Matrix[3]
+	SHUFPS $0x00, X0, X0   // Broadcast vec4.X across XMM0
+	SHUFPS $0x00, X1, X1   // Broadcast vec4.Y across XMM1
+	SHUFPS $0x00, X2, X2   // Broadcast vec4.Z across XMM2
+	SHUFPS $0x00, X3, X3   // Broadcast vec4.W across XMM3
 
 	MULPS X4, X0           // Matrix[0] * Vec4.X
 	MULPS X5, X1           // Matrix[1] * Vec4.Y
