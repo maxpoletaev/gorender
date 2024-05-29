@@ -164,11 +164,10 @@ func (m Matrix) Multiply(other Matrix) (res Matrix) {
 	return res
 }
 
-func matrixMultiplyVec4(m *Matrix, v *Vec4) Vec4 {
-	return Vec4{
-		X: m[0][0]*v.X + m[0][1]*v.Y + m[0][2]*v.Z + m[0][3]*v.W,
-		Y: m[1][0]*v.X + m[1][1]*v.Y + m[1][2]*v.Z + m[1][3]*v.W,
-		Z: m[2][0]*v.X + m[2][1]*v.Y + m[2][2]*v.Z + m[2][3]*v.W,
-		W: m[3][0]*v.X + m[3][1]*v.Y + m[3][2]*v.Z + m[3][3]*v.W,
-	}
+func matrixMultiplyVec4Inplace(m *Matrix, v *Vec4) {
+	x := m[0][0]*v.X + m[0][1]*v.Y + m[0][2]*v.Z + m[0][3]*v.W
+	y := m[1][0]*v.X + m[1][1]*v.Y + m[1][2]*v.Z + m[1][3]*v.W
+	z := m[2][0]*v.X + m[2][1]*v.Y + m[2][2]*v.Z + m[2][3]*v.W
+	w := m[3][0]*v.X + m[3][1]*v.Y + m[3][2]*v.Z + m[3][3]*v.W
+	v.X, v.Y, v.Z, v.W = x, y, z, w
 }

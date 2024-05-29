@@ -336,18 +336,10 @@ func (r *Renderer) projectObject(object *Object, camera *Camera) {
 
 			// Perspective divide
 			for j := range screenPoints {
-				screenPoints[j].X /= screenPoints[j].W
-				screenPoints[j].Y /= screenPoints[j].W
-				screenPoints[j].Z /= screenPoints[j].W
-				screenPoints[j].W = 1
-			}
-
-			// Transform to the screen space
-			matrixMultiplyVec4Batch(&screenMatrix, screenPoints[:])
-
-			// Restore the original W for texture mapping
-			for j := range screenPoints {
-				screenPoints[j].W = clipPoints[i][j].W
+				origW := screenPoints[j].W
+				screenPoints[j] = screenPoints[j].Divide(screenPoints[j].W)
+				matrixMultiplyVec4Inplace(&screenMatrix, &screenPoints[j])
+				screenPoints[j].W = origW
 			}
 
 			triangle := Triangle{
