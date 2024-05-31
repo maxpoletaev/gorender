@@ -1,6 +1,8 @@
 package main
 
-import "sync"
+import (
+	"sync"
+)
 
 const (
 	// maxClipPoints is the maximum number of vertices a polygon can have.
@@ -24,12 +26,14 @@ const (
 )
 
 type Polygon struct {
-	Points [maxClipPoints]Vec4
-	UVs    [maxClipPoints]UV
-	Count  int
+	Intensity [maxClipPoints]float32
+	Points    [maxClipPoints]Vec4
+	UVs       [maxClipPoints]UV
+	Count     int
 }
 
-func (p *Polygon) AddVertex(v Vec4, uv UV) {
+func (p *Polygon) AddVertex(v Vec4, uv UV, intensity float32) {
+	p.Intensity[p.Count] = intensity
 	p.Points[p.Count] = v
 	p.UVs[p.Count] = uv
 	p.Count++
@@ -38,6 +42,7 @@ func (p *Polygon) AddVertex(v Vec4, uv UV) {
 func (p *Polygon) Triangulate(
 	points *[maxClipPoints][3]Vec4,
 	uvs *[maxClipPoints][3]UV,
+	intensity *[maxClipPoints][3]float32,
 ) (numOut int) {
 	if p.Count < 3 {
 		return 0
@@ -47,6 +52,7 @@ func (p *Polygon) Triangulate(
 	// the first vertex with the second and the third, then the first vertex with the
 	// third and the fourth, and so on (fan triangulation).
 	for i := 0; i < p.Count-2; i++ {
+		intensity[numOut] = [3]float32{p.Intensity[0], p.Intensity[i+1], p.Intensity[i+2]}
 		points[numOut] = [3]Vec4{p.Points[0], p.Points[i+1], p.Points[i+2]}
 		uvs[numOut] = [3]UV{p.UVs[0], p.UVs[i+1], p.UVs[i+2]}
 		numOut++
@@ -147,17 +153,25 @@ func (f *Frustum) BoxVisibility(bbox *[8]Vec4) int {
 	return BoxVisibilityInside
 }
 
-func interpolateUV(a, b UV, factor float32) UV {
+func lerpUV(a, b UV, factor float32) UV {
 	return UV{
 		U: a.U + (b.U-a.U)*factor,
 		V: a.V + (b.V-a.V)*factor,
 	}
 }
 
+func lerp32(a, b float32, factor float32) float32 {
+	return a + (b-a)*factor
+}
+
 func (f *Frustum) ClipTriangle(
-	pointsIn *[3]Vec4, uvsIn *[3]UV,
+	pointsIn *[3]Vec4,
+	uvsIn *[3]UV,
+	intensityIn *[3]float32,
+
 	pointsOut *[maxClipPoints][3]Vec4,
 	uvsOut *[maxClipPoints][3]UV,
+	intensityOut *[maxClipPoints][3]float32,
 ) (numOut int) {
 	polygon := f.polygonPool.Get().(*Polygon)
 	defer f.polygonPool.Put(polygon)
@@ -167,9 +181,9 @@ func (f *Frustum) ClipTriangle(
 	defer f.polygonPool.Put(polygon2)
 	polygon2.Count = 0
 
-	polygon.AddVertex(pointsIn[0], uvsIn[0])
-	polygon.AddVertex(pointsIn[1], uvsIn[1])
-	polygon.AddVertex(pointsIn[2], uvsIn[2])
+	polygon.AddVertex(pointsIn[0], uvsIn[0], intensityIn[0])
+	polygon.AddVertex(pointsIn[1], uvsIn[1], intensityIn[1])
+	polygon.AddVertex(pointsIn[2], uvsIn[2], intensityIn[2])
 
 	planes := []int{
 		PlaneLeft,
@@ -191,18 +205,21 @@ func (f *Frustum) ClipTriangle(
 			a := (b + 1) % polygon.Count
 			uvA, uvB := polygon.UVs[a], polygon.UVs[b]
 			vertA, vertB := polygon.Points[a], polygon.Points[b]
+			intensityA, intensityB := polygon.Intensity[a], polygon.Intensity[b]
 
 			if plane.IsVertexInside(vertA) {
 				if !plane.IsVertexInside(vertB) {
 					intersect, factor := plane.Intersect(vertA, vertB)
-					uv := interpolateUV(uvA, uvB, factor)
-					polygon2.AddVertex(intersect, uv)
+					intensity := lerp32(intensityA, intensityB, factor)
+					uv := lerpUV(uvA, uvB, factor)
+					polygon2.AddVertex(intersect, uv, intensity)
 				}
-				polygon2.AddVertex(vertA, uvA)
+				polygon2.AddVertex(vertA, uvA, intensityA)
 			} else if plane.IsVertexInside(vertB) {
 				intersect, factor := plane.Intersect(vertA, vertB)
-				uv := interpolateUV(uvA, uvB, factor)
-				polygon2.AddVertex(intersect, uv)
+				intensity := lerp32(intensityA, intensityB, factor)
+				uv := lerpUV(uvA, uvB, factor)
+				polygon2.AddVertex(intersect, uv, intensity)
 			}
 		}
 
@@ -215,5 +232,5 @@ func (f *Frustum) ClipTriangle(
 	}
 
 	// Convert the polygon back to triangles
-	return polygon.Triangulate(pointsOut, uvsOut)
+	return polygon.Triangulate(pointsOut, uvsOut, intensityOut)
 }

@@ -27,8 +27,9 @@ type Camera struct {
 type Triangle struct {
 	Points    [3]Vec4
 	UVs       [3]UV
+	Intensity [3]float32
 	Texture   *Texture
-	Intensity float32
+	//Intensity   float32
 }
 
 type DebugInfo struct {
@@ -160,6 +161,7 @@ func NewRenderer(fb *FrameBuffer) *Renderer {
 }
 
 func (r *Renderer) drawProjection(t *Triangle, tile uint) {
+	lightA, lightB, lightC := t.Intensity[0], t.Intensity[1], t.Intensity[2]
 	a, b, c := t.Points[0], t.Points[1], t.Points[2]
 	uvA, uvB, uvC := t.UVs[0], t.UVs[1], t.UVs[2]
 
@@ -173,13 +175,13 @@ func (r *Renderer) drawProjection(t *Triangle, tile uint) {
 	}
 
 	if r.ShowFaces {
-		r.fb.Triangle2(
+		r.fb.Triangle(
 			int(a.X), int(a.Y), a.W, uvA.U, uvA.V,
 			int(b.X), int(b.Y), b.W, uvB.U, uvB.V,
 			int(c.X), int(c.Y), c.W, uvC.U, uvC.V,
 			int(tileStart.X), int(tileStart.Y), int(tileEnd.X), int(tileEnd.Y),
+			lightA, lightB, lightC,
 			t.Texture,
-			t.Intensity,
 		)
 	}
 
@@ -251,7 +253,7 @@ func (r *Renderer) projectObject(object *Object, camera *Camera) {
 	mvpMatrix = mvpMatrix.Multiply(worldMatrix)
 
 	screenMatrix := NewScreenMatrix(r.fb.Width, r.fb.Height)
-	lightDirection := Vec3{Y: 0.5, Z: -1}.Normalize()
+	lightDirection := Vec3{X: -0.5, Y: 1, Z: 1}.Normalize()
 
 	// Transform the bounding box to clip space
 	bbox := object.BoundingBox
@@ -264,14 +266,18 @@ func (r *Renderer) projectObject(object *Object, camera *Camera) {
 	}
 
 	var (
-		// Original triangle points
 		tileNums [maxTiles]uint8
-		points   [3]Vec4
+
+		// Original triangle points
+		points          [3]Vec4
+		vertexNormals   [3]Vec3
+		vertexIntensity [3]float32
 
 		// New points after frustum clipping
-		clipPoints [maxClipPoints][3]Vec4
-		clipUV     [maxClipPoints][3]UV
-		clipCount  int
+		clipIntensity [maxClipPoints][3]float32
+		clipPoints    [maxClipPoints][3]Vec4
+		clipUV        [maxClipPoints][3]UV
+		clipCount     int
 	)
 
 	// Local buffers are pooled to avoid zeroing them on each frame
@@ -292,9 +298,16 @@ func (r *Renderer) projectObject(object *Object, camera *Camera) {
 	for fi := range object.Faces {
 		face := &object.Faces[fi] // avoid face copy
 
-		points[0] = object.Transformed[face.A]
-		points[1] = object.Transformed[face.B]
-		points[2] = object.Transformed[face.C]
+		points[0] = object.Transformed[face.VertexIndices[0]]
+		points[1] = object.Transformed[face.VertexIndices[1]]
+		points[2] = object.Transformed[face.VertexIndices[2]]
+
+		// Transform the vertex normals to world space
+		for i := range face.VertexNormals {
+			vn := face.VertexNormals[i].ToVec4()
+			matrixMultiplyVec4Inplace(&worldMatrix, &vn)
+			vertexNormals[i] = vn.ToVec3().Normalize()
+		}
 
 		// Calculate the face normal (cross product of two edges)
 		v0, v1, v2 := points[0].ToVec3(), points[1].ToVec3(), points[2].ToVec3()
@@ -307,27 +320,23 @@ func (r *Renderer) projectObject(object *Object, camera *Camera) {
 			}
 		}
 
-		// Normalize for lighting calculations
-		faceNormal = faceNormal.Normalize()
-		lightIntensity := float32(0.5)
-
 		if r.Lighting {
-			const (
-				ambientStrength = 0.5
-				diffuseStrength = 0.5
-			)
-
-			diffuse := max(faceNormal.DotProduct(lightDirection), 0.0) * diffuseStrength
-			lightIntensity = ambientStrength + diffuse
+			for i := range vertexNormals {
+				diffuse := max(vertexNormals[i].DotProduct(lightDirection), 0.0) * 0.5
+				vertexIntensity[i] = 0.5 + diffuse
+			}
 		}
 
 		// Clip triangles if object is not fully inside the frustum
 		if r.FrustumClipping && boxVisibility != BoxVisibilityInside {
-			uvs := [3]UV{face.UVa, face.UVb, face.UVc}
-			clipCount = r.frustum.ClipTriangle(&points, &uvs, &clipPoints, &clipUV)
+			clipCount = r.frustum.ClipTriangle(
+				&points, &face.UVs, &vertexIntensity,
+				&clipPoints, &clipUV, &clipIntensity,
+			)
 		} else {
-			clipPoints[0] = [3]Vec4{points[0], points[1], points[2]}
-			clipUV[0] = [3]UV{face.UVa, face.UVb, face.UVc}
+			clipIntensity[0] = vertexIntensity
+			clipPoints[0] = points
+			clipUV[0] = face.UVs
 			clipCount = 1
 		}
 
@@ -346,7 +355,7 @@ func (r *Renderer) projectObject(object *Object, camera *Camera) {
 				Points:    screenPoints,
 				UVs:       clipUV[i],
 				Texture:   face.Texture,
-				Intensity: lightIntensity,
+				Intensity: clipIntensity[i],
 			}
 
 			// Identify the tiles that the triangle is visible in
@@ -439,7 +448,9 @@ func (r *Renderer) Draw(objects []*Object, camera *Camera) {
 		}
 	}
 
-	//r.drawTilesBoundaries()
-	r.fb.CrossHair(color.RGBA{255, 255, 0, 255})
-	//r.fb.Fog(0.100, 0.033, color.RGBA{100, 100, 100, 255})
+	if !demoMode {
+		//r.drawTilesBoundaries()
+		r.fb.CrossHair(color.RGBA{255, 255, 0, 255})
+		//r.fb.Fog(0.100, 0.033, color.RGBA{100, 100, 100, 255})
+	}
 }

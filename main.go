@@ -13,12 +13,13 @@ import (
 )
 
 const (
-	downscaleFactor = 2
+	downscaleFactor = 1
 	viewWidth       = 800 / downscaleFactor
 	viewHeight      = 600 / downscaleFactor
 	parallel        = true
 	frameRate       = 60
 	windowTitle     = "goxgl"
+	demoMode        = true
 )
 
 func onOff(b bool) string {
@@ -187,7 +188,7 @@ func main() {
 
 	camera := &Camera{
 		Direction: Vec3{0, 0, -1},
-		Position:  Vec3{0, 0, 5},
+		Position:  Vec3{0, 0.5, 5},
 		Up:        Vec3{0, 1, 0},
 	}
 
@@ -203,8 +204,11 @@ func main() {
 		}
 	}()
 
-	rl.DisableCursor()
 	triggerDraw <- struct{}{}
+
+	if !demoMode {
+		rl.DisableCursor()
+	}
 
 	var (
 		lastCursorX = rl.GetMouseX()
@@ -216,9 +220,11 @@ func main() {
 		fb.SwapBuffers()
 		triggerDraw <- struct{}{}
 
-		//for _, obj := range scene.Objects {
-		//	obj.Rotation.Y += 0.1
-		//}
+		if demoMode {
+			for _, obj := range scene.Objects {
+				obj.Rotation.Y += 0.01
+			}
+		}
 
 		forward := camera.Direction.Normalize()
 		//forward.Y = 0 // Only move in the XZ plane
@@ -258,23 +264,25 @@ func main() {
 			renderer.ShowTextures = !renderer.ShowTextures
 		}
 
-		cursorX := rl.GetMouseX()
-		cursorY := rl.GetMouseY()
+		if !demoMode {
+			cursorX := rl.GetMouseX()
+			cursorY := rl.GetMouseY()
 
-		deltaX := cursorX - lastCursorX
-		deltaY := cursorY - lastCursorY
+			deltaX := cursorX - lastCursorX
+			deltaY := cursorY - lastCursorY
 
-		if deltaX != 0 || deltaY != 0 {
-			yaw := -float32(deltaX) * 0.002
-			pitch := -float32(deltaY) * 0.002
-			yawQuaternion := NewQuaternionFromAxisAngle(camera.Up, yaw)
-			pitchQuaternion := NewQuaternionFromAxisAngle(right, pitch)
-			camera.Direction = yawQuaternion.Rotate(camera.Direction).Normalize()
-			camera.Direction = pitchQuaternion.Rotate(camera.Direction).Normalize()
+			if deltaX != 0 || deltaY != 0 {
+				yaw := -float32(deltaX) * 0.002
+				pitch := -float32(deltaY) * 0.002
+				yawQuaternion := NewQuaternionFromAxisAngle(camera.Up, yaw)
+				pitchQuaternion := NewQuaternionFromAxisAngle(right, pitch)
+				camera.Direction = yawQuaternion.Rotate(camera.Direction).Normalize()
+				camera.Direction = pitchQuaternion.Rotate(camera.Direction).Normalize()
+			}
+
+			lastCursorX = cursorX
+			lastCursorY = cursorY
 		}
-
-		lastCursorX = cursorX
-		lastCursorY = cursorY
 
 		// Copy the frame buffer to the render texture
 		rl.BeginTextureMode(renderTexture)

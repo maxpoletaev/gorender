@@ -20,6 +20,7 @@ type ObjContext struct {
 	Vertices        []Vec4
 	Faces           []Face
 	TextureVertices []UV
+	VertexNormals   []Vec3
 	Textures        map[string]*Texture
 }
 
@@ -35,60 +36,76 @@ func parseTextureVertex(line string) (UV, error) {
 	return UV{x, y}, err
 }
 
+func parseVertexNormal(line string) (Vec3, error) {
+	var x, y, z float32
+	_, err := fmt.Sscanf(line, "vn %f %f %f", &x, &y, &z)
+	return Vec3{x, y, z}, err
+}
+
 func parseFace(c *ObjContext, line string) (Face, error) {
 	if strings.Count(line, " ") != 3 {
 		return Face{}, errors.New("mesh is not triangulated")
 	}
 
 	var (
-		err     error
-		face    Face
-		discard int
+		err  error
+		face Face
 	)
 
 	switch {
 	case strings.Contains(line, "//"):
+		var vn0, vn1, vn2 int
+
 		_, err = fmt.Sscanf(
 			line, "f %d//%d %d//%d %d//%d",
-			&face.A, &discard,
-			&face.B, &discard,
-			&face.C, &discard,
+			&face.VertexIndices[0], &vn0,
+			&face.VertexIndices[1], &vn1,
+			&face.VertexIndices[2], &vn2,
 		)
+
+		face.VertexNormals[0] = c.VertexNormals[vn0-1]
+		face.VertexNormals[1] = c.VertexNormals[vn1-1]
+		face.VertexNormals[2] = c.VertexNormals[vn2-1]
 
 	case strings.Contains(line, "/") && strings.Count(line, "/") == 3:
 		_, err = fmt.Sscanf(
 			line, "f %d/%d %d/%d %d/%d",
-			&face.A, &face.UVa,
-			&face.B, &face.UVc,
-			&face.C, &face.UVb,
+			&face.VertexIndices[0], &face.UVs[0],
+			&face.VertexIndices[1], &face.UVs[1],
+			&face.VertexIndices[2], &face.UVs[2],
 		)
 
 	case strings.Contains(line, "/") && strings.Count(line, "/") == 6:
-		var vtA, vtB, vtC int
+		var vt0, vt1, vt2 int
+		var vn0, vn1, vn2 int
+
 		_, err = fmt.Sscanf(
 			line, "f %d/%d/%d %d/%d/%d %d/%d/%d",
-			&face.A, &vtA, &discard,
-			&face.B, &vtB, &discard,
-			&face.C, &vtC, &discard,
+			&face.VertexIndices[0], &vt0, &vn0,
+			&face.VertexIndices[1], &vt1, &vn1,
+			&face.VertexIndices[2], &vt2, &vn2,
 		)
 
-		face.UVa = c.TextureVertices[vtA-1]
-		face.UVb = c.TextureVertices[vtB-1]
-		face.UVc = c.TextureVertices[vtC-1]
+		face.UVs[0] = c.TextureVertices[vt0-1]
+		face.UVs[1] = c.TextureVertices[vt1-1]
+		face.UVs[2] = c.TextureVertices[vt2-1]
+		face.VertexNormals[0] = c.VertexNormals[vn0-1]
+		face.VertexNormals[1] = c.VertexNormals[vn1-1]
+		face.VertexNormals[2] = c.VertexNormals[vn2-1]
 
 	default:
 		_, err = fmt.Sscanf(
 			line, "f %d %d %d",
-			&face.A,
-			&face.B,
-			&face.C,
+			&face.VertexIndices[0],
+			&face.VertexIndices[1],
+			&face.VertexIndices[2],
 		)
 	}
 
 	// Indices are 1-based in .obj files.
-	face.A -= 1
-	face.B -= 1
-	face.C -= 1
+	face.VertexIndices[0] -= 1
+	face.VertexIndices[1] -= 1
+	face.VertexIndices[2] -= 1
 
 	return face, err
 }
@@ -208,6 +225,13 @@ func LoadObjFile(filename string) (*Mesh, error) {
 				return nil, err
 			}
 			c.TextureVertices = append(c.TextureVertices, vt)
+
+		case strings.HasPrefix(line, "vn "):
+			vn, err := parseVertexNormal(line)
+			if err != nil {
+				return nil, err
+			}
+			c.VertexNormals = append(c.VertexNormals, vn)
 
 		case strings.HasPrefix(line, "usemtl "):
 			mtlName := strings.TrimPrefix(line, "usemtl ")

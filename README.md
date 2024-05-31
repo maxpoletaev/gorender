@@ -34,7 +34,7 @@ options like wireframe, texturing, backface culling, etc.
 * Backface culling
 * Affine texture mapping
 * Perspective correct texture mapping
-* Flat shading
+* Gouraud shading
 * Z-buffering
 * View frustum clipping
 * OBJ file support (with MTL files) - only triangulated

@@ -10,8 +10,9 @@ type UV struct {
 }
 
 type Face struct {
-	UVa, UVb, UVc UV  // Texture coordinates
-	A, B, C       int // Vertex indices
+	VertexIndices [3]int
+	VertexNormals [3]Vec3
+	UVs           [3]UV
 	Texture       *Texture
 	Normal        Vec3
 }
