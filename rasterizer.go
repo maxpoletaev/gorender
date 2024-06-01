@@ -93,7 +93,6 @@ func (fb *FrameBuffer) Triangle(
 	x2, y2 int, z2 float32, u2, v2 float32,
 	tileStartX, tileStartY, tileEndX, tileEndY int,
 	intensA, intensB, intensC float32,
-	//intensity float32,
 	texture *Texture,
 ) {
 	// Find the bounding box of the triangle
@@ -103,12 +102,6 @@ func (fb *FrameBuffer) Triangle(
 	// Clip the bounding box to the tile boundaries
 	minX, maxX = max(minX, tileStartX, 0), min(maxX, tileEndX, fb.Width-1)
 	minY, maxY = max(minY, tileStartY, 0), min(maxY, tileEndY, fb.Height-1)
-
-	// Ensure the intensity is in the range [0.2, 1.0]
-	//intensity = max(0.2, min(intensity, 1.0))
-	intensA = max(0.1, min(intensA, 1.0))
-	intensB = max(0.1, min(intensB, 1.0))
-	intensC = max(0.1, min(intensC, 1.0))
 
 	// Calculate initial edge function values for the first pixel in the bounding box
 	f01 := (y0-y1)*minX + (x1-x0)*minY + (x0*y1 - x1*y0)

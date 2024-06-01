@@ -188,7 +188,7 @@ func main() {
 
 	camera := &Camera{
 		Direction: Vec3{0, 0, -1},
-		Position:  Vec3{0, 0.5, 5},
+		Position:  Vec3{0, 0, 5},
 		Up:        Vec3{0, 1, 0},
 	}
 
@@ -218,6 +218,9 @@ func main() {
 	for !rl.WindowShouldClose() {
 		<-frameReady
 		fb.SwapBuffers()
+		framesPerSecond := int(rl.GetFPS())
+		trianglesPerFrame := renderer.TPF
+		trianglesPerSecond := (trianglesPerFrame * framesPerSecond) / 1000
 		triggerDraw <- struct{}{}
 
 		if demoMode {
@@ -262,6 +265,8 @@ func main() {
 			renderer.FrustumClipping = !renderer.FrustumClipping
 		case rl.IsKeyPressed(rl.KeyT):
 			renderer.ShowTextures = !renderer.ShowTextures
+		case rl.IsKeyPressed(rl.KeyI):
+			renderer.FlatShading = !renderer.FlatShading
 		}
 
 		if !demoMode {
@@ -300,7 +305,7 @@ func main() {
 			rl.White,
 		)
 
-		drawText(5, 5, fmt.Sprintf("%d fps", rl.GetFPS()))
+		drawText(5, 5, fmt.Sprintf("%d fps / %dk tps", framesPerSecond, trianglesPerSecond))
 		drawText(5, 15, fmt.Sprintf("objects: %d", oumObjects))
 		drawText(5, 25, fmt.Sprintf("vertices: %d", numVertices))
 		drawText(5, 35, fmt.Sprintf("triangles: %d", numTriangles))
@@ -309,7 +314,7 @@ func main() {
 			5,
 			windowHeight-15,
 			fmt.Sprintf(
-				"[V]erticies: %s [E]dges: %s [F]aces: %s, [L]ights: %s, [B]ackface culling: %s, [C]lipping: %s, [T]extures: %s",
+				"[V]erticies: %s [E]dges: %s [F]aces: %s, [L]ights: %s, [B]ackface culling: %s, [C]lipping: %s, [T]extures: %s, Flat Shad[i]ng: %s",
 				onOff(renderer.ShowVertices),
 				onOff(renderer.ShowEdges),
 				onOff(renderer.ShowFaces),
@@ -317,6 +322,7 @@ func main() {
 				onOff(renderer.BackfaceCulling),
 				onOff(renderer.FrustumClipping),
 				onOff(renderer.ShowTextures),
+				onOff(renderer.FlatShading),
 			),
 		)
 

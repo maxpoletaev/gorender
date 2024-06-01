@@ -20,7 +20,7 @@ type ObjContext struct {
 	Vertices        []Vec4
 	Faces           []Face
 	TextureVertices []UV
-	VertexNormals   []Vec3
+	VertexNormals   []Vec4
 	Textures        map[string]*Texture
 }
 
@@ -36,10 +36,10 @@ func parseTextureVertex(line string) (UV, error) {
 	return UV{x, y}, err
 }
 
-func parseVertexNormal(line string) (Vec3, error) {
+func parseVertexNormal(line string) (Vec4, error) {
 	var x, y, z float32
 	_, err := fmt.Sscanf(line, "vn %f %f %f", &x, &y, &z)
-	return Vec3{x, y, z}, err
+	return Vec4{x, y, z, 1}, err
 }
 
 func parseFace(c *ObjContext, line string) (Face, error) {
@@ -54,18 +54,12 @@ func parseFace(c *ObjContext, line string) (Face, error) {
 
 	switch {
 	case strings.Contains(line, "//"):
-		var vn0, vn1, vn2 int
-
 		_, err = fmt.Sscanf(
 			line, "f %d//%d %d//%d %d//%d",
-			&face.VertexIndices[0], &vn0,
-			&face.VertexIndices[1], &vn1,
-			&face.VertexIndices[2], &vn2,
+			&face.VertexIndices[0], &face.NormalIndices[0],
+			&face.VertexIndices[1], &face.NormalIndices[1],
+			&face.VertexIndices[2], &face.NormalIndices[2],
 		)
-
-		face.VertexNormals[0] = c.VertexNormals[vn0-1]
-		face.VertexNormals[1] = c.VertexNormals[vn1-1]
-		face.VertexNormals[2] = c.VertexNormals[vn2-1]
 
 	case strings.Contains(line, "/") && strings.Count(line, "/") == 3:
 		_, err = fmt.Sscanf(
@@ -77,21 +71,17 @@ func parseFace(c *ObjContext, line string) (Face, error) {
 
 	case strings.Contains(line, "/") && strings.Count(line, "/") == 6:
 		var vt0, vt1, vt2 int
-		var vn0, vn1, vn2 int
 
 		_, err = fmt.Sscanf(
 			line, "f %d/%d/%d %d/%d/%d %d/%d/%d",
-			&face.VertexIndices[0], &vt0, &vn0,
-			&face.VertexIndices[1], &vt1, &vn1,
-			&face.VertexIndices[2], &vt2, &vn2,
+			&face.VertexIndices[0], &vt0, &face.NormalIndices[0],
+			&face.VertexIndices[1], &vt1, &face.NormalIndices[1],
+			&face.VertexIndices[2], &vt2, &face.NormalIndices[2],
 		)
 
 		face.UVs[0] = c.TextureVertices[vt0-1]
 		face.UVs[1] = c.TextureVertices[vt1-1]
 		face.UVs[2] = c.TextureVertices[vt2-1]
-		face.VertexNormals[0] = c.VertexNormals[vn0-1]
-		face.VertexNormals[1] = c.VertexNormals[vn1-1]
-		face.VertexNormals[2] = c.VertexNormals[vn2-1]
 
 	default:
 		_, err = fmt.Sscanf(
@@ -106,6 +96,9 @@ func parseFace(c *ObjContext, line string) (Face, error) {
 	face.VertexIndices[0] -= 1
 	face.VertexIndices[1] -= 1
 	face.VertexIndices[2] -= 1
+	face.NormalIndices[0] -= 1
+	face.NormalIndices[1] -= 1
+	face.NormalIndices[2] -= 1
 
 	return face, err
 }
@@ -247,5 +240,5 @@ func LoadObjFile(filename string) (*Mesh, error) {
 		}
 	}
 
-	return NewMesh(c.Vertices, c.Faces), nil
+	return NewMesh(c.Vertices, c.VertexNormals, c.Faces), nil
 }

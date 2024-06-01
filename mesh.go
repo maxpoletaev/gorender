@@ -11,17 +11,18 @@ type UV struct {
 
 type Face struct {
 	VertexIndices [3]int
-	VertexNormals [3]Vec3
+	NormalIndices [3]int
 	UVs           [3]UV
 	Texture       *Texture
-	Normal        Vec3
 }
 
 type Mesh struct {
-	Name        string
-	Vertices    []Vec4
-	Faces       []Face
-	BoundingBox [8]Vec4
+	Name          string
+	Vertices      []Vec4
+	VertexNormals []Vec4
+	FaceNormals   []Vec4
+	BoundingBox   [8]Vec4
+	Faces         []Face
 }
 
 func boundingBox(vertices []Vec4) [8]Vec4 {
@@ -49,27 +50,41 @@ func boundingBox(vertices []Vec4) [8]Vec4 {
 	}
 }
 
-func NewMesh(vertices []Vec4, faces []Face) *Mesh {
+func NewMesh(vertices []Vec4, vertexNormals []Vec4, faces []Face) *Mesh {
+	faceNormals := make([]Vec4, len(faces))
+	for i := range faces {
+		v0 := vertices[faces[i].VertexIndices[0]].ToVec3()
+		v1 := vertices[faces[i].VertexIndices[1]].ToVec3()
+		v2 := vertices[faces[i].VertexIndices[2]].ToVec3()
+		faceNormals[i] = v1.Sub(v0).CrossProduct(v2.Sub(v0)).Normalize().ToVec4()
+	}
+
 	return &Mesh{
-		Faces:       faces,
-		Vertices:    vertices,
-		BoundingBox: boundingBox(vertices),
+		Faces:         faces,
+		Vertices:      vertices,
+		VertexNormals: vertexNormals,
+		FaceNormals:   faceNormals,
+		BoundingBox:   boundingBox(vertices),
 	}
 }
 
 type Object struct {
 	*Mesh
-	Rotation    Vec3
-	Translation Vec3
-	Scale       Vec3
-	Transformed []Vec4
+	Rotation            Vec3
+	Translation         Vec3
+	Scale               Vec3
+	TransformedVertices []Vec4
+	WorldVertexNormals  []Vec4
+	WorldFaceNormals    []Vec4
 }
 
 func NewObject(mesh *Mesh) *Object {
 	return &Object{
-		Mesh:        mesh,
-		Scale:       Vec3{1, 1, 1},
-		Transformed: make([]Vec4, len(mesh.Vertices)),
+		Mesh:                mesh,
+		Scale:               Vec3{1, 1, 1},
+		TransformedVertices: make([]Vec4, len(mesh.Vertices)),
+		WorldFaceNormals:    make([]Vec4, len(mesh.FaceNormals)),
+		WorldVertexNormals:  make([]Vec4, len(mesh.VertexNormals)),
 	}
 }
 

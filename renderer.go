@@ -8,7 +8,9 @@ import (
 )
 
 const (
-	maxTiles = 16
+	maxTiles        = 16
+	diffuseStrength = 0.5
+	ambientStrength = 0.5
 )
 
 var (
@@ -29,7 +31,6 @@ type Triangle struct {
 	UVs       [3]UV
 	Intensity [3]float32
 	Texture   *Texture
-	//Intensity   float32
 }
 
 type DebugInfo struct {
@@ -92,7 +93,9 @@ type Renderer struct {
 	ShowFaces       bool
 	BackfaceCulling bool
 	Lighting        bool
+	FlatShading     bool
 	ShowTextures    bool
+	TPF             int // Triangles per frame
 
 	DebugEnabled bool
 	DebugInfo    []DebugInfo
@@ -240,6 +243,12 @@ func (r *Renderer) identifyTriangleTiles(points *[3]Vec4, tileNums *[maxTiles]ui
 	return n
 }
 
+func facingCamera(points *[3]Vec4) bool {
+	v0, v1, v2 := points[0].ToVec3(), points[1].ToVec3(), points[2].ToVec3()
+	faceNormal := v1.Sub(v0).CrossProduct(v2.Sub(v0))
+	return faceNormal.DotProduct(Vec3{0, 0, 0}.Sub(v0)) > 0
+}
+
 // projectObject projects the object to the screen space. Object’s Face projections are
 // stored in the corresponding tileTriangle buffers for later rasterization.
 func (r *Renderer) projectObject(object *Object, camera *Camera) {
@@ -253,7 +262,7 @@ func (r *Renderer) projectObject(object *Object, camera *Camera) {
 	mvpMatrix = mvpMatrix.Multiply(worldMatrix)
 
 	screenMatrix := NewScreenMatrix(r.fb.Width, r.fb.Height)
-	lightDirection := Vec3{X: -0.5, Y: 1, Z: 1}.Normalize()
+	lightDirection := Vec3{X: -1, Y: 1, Z: 1}.Normalize()
 
 	// Transform the bounding box to clip space
 	bbox := object.BoundingBox
@@ -269,13 +278,12 @@ func (r *Renderer) projectObject(object *Object, camera *Camera) {
 		tileNums [maxTiles]uint8
 
 		// Original triangle points
-		points          [3]Vec4
-		vertexNormals   [3]Vec3
+		vertices        [3]Vec4
 		vertexIntensity [3]float32
 
 		// New points after frustum clipping
+		clipVertices  [maxClipPoints][3]Vec4
 		clipIntensity [maxClipPoints][3]float32
-		clipPoints    [maxClipPoints][3]Vec4
 		clipUV        [maxClipPoints][3]UV
 		clipCount     int
 	)
@@ -292,56 +300,66 @@ func (r *Renderer) projectObject(object *Object, camera *Camera) {
 	}
 
 	// Transform the vertices to clip space
-	copy(object.Transformed, object.Vertices)
-	matrixMultiplyVec4Batch(&mvpMatrix, object.Transformed)
+	copy(object.TransformedVertices, object.Vertices)
+	matrixMultiplyVec4Batch(&mvpMatrix, object.TransformedVertices)
+
+	// Transform the normals to world space (for light calculation)
+	copy(object.WorldFaceNormals, object.FaceNormals)
+	copy(object.WorldVertexNormals, object.VertexNormals)
+	matrixMultiplyVec4Batch(&worldMatrix, object.WorldFaceNormals)
+	matrixMultiplyVec4Batch(&worldMatrix, object.WorldVertexNormals)
+
+	// Objects without vertex normals are lit by face normals
+	hasVertexNormals := len(object.VertexNormals) != 0
 
 	for fi := range object.Faces {
 		face := &object.Faces[fi] // avoid face copy
 
-		points[0] = object.Transformed[face.VertexIndices[0]]
-		points[1] = object.Transformed[face.VertexIndices[1]]
-		points[2] = object.Transformed[face.VertexIndices[2]]
+		vertices[0] = object.TransformedVertices[face.VertexIndices[0]]
+		vertices[1] = object.TransformedVertices[face.VertexIndices[1]]
+		vertices[2] = object.TransformedVertices[face.VertexIndices[2]]
 
-		// Transform the vertex normals to world space
-		for i := range face.VertexNormals {
-			vn := face.VertexNormals[i].ToVec4()
-			matrixMultiplyVec4Inplace(&worldMatrix, &vn)
-			vertexNormals[i] = vn.ToVec3().Normalize()
-		}
-
-		// Calculate the face normal (cross product of two edges)
-		v0, v1, v2 := points[0].ToVec3(), points[1].ToVec3(), points[2].ToVec3()
-		faceNormal := v1.Sub(v0).CrossProduct(v2.Sub(v0))
-
-		if r.BackfaceCulling {
-			// Normal-based backface culling (face is not visible if the normal is not facing the camera)
-			if faceNormal.DotProduct(Vec3{0, 0, 0}.Sub(v0)) < 0 {
-				continue
-			}
+		if r.BackfaceCulling && !facingCamera(&vertices) {
+			continue
 		}
 
 		if r.Lighting {
-			for i := range vertexNormals {
-				diffuse := max(vertexNormals[i].DotProduct(lightDirection), 0.0) * 0.5
-				vertexIntensity[i] = 0.5 + diffuse
+			if hasVertexNormals && !r.FlatShading {
+				vn0 := object.WorldVertexNormals[face.NormalIndices[0]].Normalize().ToVec3()
+				vn1 := object.WorldVertexNormals[face.NormalIndices[1]].Normalize().ToVec3()
+				vn2 := object.WorldVertexNormals[face.NormalIndices[2]].Normalize().ToVec3()
+				vertexIntensity[0] = ambientStrength + vn0.DotProduct(lightDirection)*diffuseStrength
+				vertexIntensity[1] = ambientStrength + vn1.DotProduct(lightDirection)*diffuseStrength
+				vertexIntensity[2] = ambientStrength + vn2.DotProduct(lightDirection)*diffuseStrength
+			} else {
+				fn := object.WorldFaceNormals[fi].Normalize().ToVec3()
+				diffuse := fn.DotProduct(lightDirection) * diffuseStrength
+				intensity := ambientStrength + diffuse
+				vertexIntensity[0] = intensity
+				vertexIntensity[1] = intensity
+				vertexIntensity[2] = intensity
 			}
+		} else {
+			vertexIntensity[0] = ambientStrength
+			vertexIntensity[1] = ambientStrength
+			vertexIntensity[2] = ambientStrength
 		}
 
 		// Clip triangles if object is not fully inside the frustum
 		if r.FrustumClipping && boxVisibility != BoxVisibilityInside {
 			clipCount = r.frustum.ClipTriangle(
-				&points, &face.UVs, &vertexIntensity,
-				&clipPoints, &clipUV, &clipIntensity,
+				&vertices, &face.UVs, &vertexIntensity,
+				&clipVertices, &clipUV, &clipIntensity,
 			)
 		} else {
 			clipIntensity[0] = vertexIntensity
-			clipPoints[0] = points
+			clipVertices[0] = vertices
 			clipUV[0] = face.UVs
 			clipCount = 1
 		}
 
 		for i := 0; i < clipCount; i++ {
-			screenPoints := clipPoints[i]
+			screenPoints := clipVertices[i]
 
 			// Perspective divide
 			for j := range screenPoints {
@@ -415,6 +433,13 @@ func (r *Renderer) drawTilesBoundaries() {
 	}
 }
 
+func (r *Renderer) updateStats() {
+	r.TPF = 0
+	for i := range r.numTiles {
+		r.TPF += len(r.tileTriangles[i])
+	}
+}
+
 func (r *Renderer) Draw(objects []*Object, camera *Camera) {
 	for i := uint(0); i < r.numTiles; i++ {
 		r.tileTriangles[i] = r.tileTriangles[i][:0]
@@ -453,4 +478,6 @@ func (r *Renderer) Draw(objects []*Object, camera *Camera) {
 		r.fb.CrossHair(color.RGBA{255, 255, 0, 255})
 		//r.fb.Fog(0.100, 0.033, color.RGBA{100, 100, 100, 255})
 	}
+
+	r.updateStats()
 }
