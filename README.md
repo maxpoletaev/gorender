@@ -5,9 +5,14 @@ to build to learn some math and magic behind 3D graphics. It uses raylib for win
 management and delivering pixels to the screen, but all the rendering is done
 from scratch in Go with no external libraries.
 
-https://github.com/maxpoletaev/goxgl/assets/1812128/fb309de4-3a43-47c5-a90b-879352eb89ab
+Running in multi-core mode at 1280×720 resolution on my laptop, it maintains
+95-105 FPS for an untextured object made of 200K triangles. Not counting the
+culled ones, this results in pushing around 10 million triangles per second to
+the screen.
 
-*Result of loading a model of a Doom map converted to OBJ format*
+https://github.com/maxpoletaev/goxgl/assets/1812128/985253cc-a0fc-4972-88c9-ef51d6f03af0
+
+*Sonic-HD 3D model by alexandelyt ([Sketchfab](https://sketchfab.com/3d-models/sonic-hd-c23cead36d9349988a4981b92eabf208))*
 
 ## Building
 
@@ -34,12 +39,13 @@ options like wireframe, texturing, backface culling, etc.
 * Backface culling
 * Affine texture mapping
 * Perspective correct texture mapping
+* Flat shading
 * Gouraud shading
 * Z-buffering
 * View frustum clipping
 * OBJ file support (with MTL files) - only triangulated
 * Parallel tile-based rendering
-* Multi-object scenes support
+* Multi-object scenes
 
 ## Resources
 
