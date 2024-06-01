@@ -153,13 +153,16 @@ func main() {
 
 	switch path.Ext(filename) {
 	case ".obj":
-		mesh, err := LoadMeshFile(filename)
+		meshes, err := LoadMeshFile(filename, false)
 		if err != nil {
 			log.Fatalf("failed to load mesh file: %s", err)
 		}
 
-		object := NewObject(mesh)
-		scene = &Scene{Objects: []*Object{object}}
+		scene = &Scene{}
+		for i := range meshes {
+			object := NewObject(meshes[i])
+			scene.Objects = append(scene.Objects, object)
+		}
 	case ".json":
 		scene, err = LoadSceneFile(filename)
 		if err != nil {

@@ -3,7 +3,7 @@
 #include "textflag.h"
 #include "go_asm.h"
 
-// func func _matrixMultiplyVec4SSE(mat *Matrix, vecs []Vec4)
+// func _matrixMultiplyVec4SSE(mat *Matrix, vecs []Vec4)
 TEXT ·_matrixMultiplyVec4SSE(SB), $0-32
 	MOVQ mat+0(FP), SI        // SI = mat
 	MOVQ vecs_base+8(FP), DI  // DI = vecs

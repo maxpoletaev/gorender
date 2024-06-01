@@ -3,7 +3,7 @@
 package main
 
 func init() {
-	println("noasm")
+	println("purego")
 }
 
 func matrixMultiplyVec4Batch(m *Matrix, vecs []Vec4) {

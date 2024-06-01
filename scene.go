@@ -80,11 +80,12 @@ func LoadSceneFile(filename string) (*Scene, error) {
 	)
 
 	for _, meshData := range sceneData.Meshes {
-		fmt.Println(path.Join(rootDir, meshData.ObjFile))
-		mesh, err := LoadMeshFile(path.Join(rootDir, meshData.ObjFile))
+		loadedMeshes, err := LoadMeshFile(path.Join(rootDir, meshData.ObjFile), true)
 		if err != nil {
 			return nil, fmt.Errorf("failed to load mesh '%s': %w", meshData.ID, err)
 		}
+
+		mesh := loadedMeshes[0]
 
 		if meshData.Texture != "" {
 			texture, err := LoadTextureFile(path.Join(rootDir, meshData.Texture))

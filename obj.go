@@ -22,6 +22,21 @@ type ObjContext struct {
 	TextureVertices []UV
 	VertexNormals   []Vec4
 	Textures        map[string]*Texture
+
+	VertexIndexOffset   int
+	TextureVertexOffset int
+	VertexNormalOffset  int
+}
+
+func (c *ObjContext) Clear() {
+	c.VertexIndexOffset += len(c.Vertices)
+	c.TextureVertexOffset += len(c.TextureVertices)
+	c.VertexNormalOffset += len(c.VertexNormals)
+
+	c.Vertices = nil
+	c.Faces = nil
+	c.TextureVertices = nil
+	c.VertexNormals = nil
 }
 
 func parseVertex(line string) (Vec4, error) {
@@ -54,51 +69,79 @@ func parseFace(c *ObjContext, line string) (Face, error) {
 
 	switch {
 	case strings.Contains(line, "//"):
+		var (
+			v0, v1, v2    int
+			vn0, vn1, vn2 int
+		)
+
 		_, err = fmt.Sscanf(
 			line, "f %d//%d %d//%d %d//%d",
-			&face.VertexIndices[0], &face.NormalIndices[0],
-			&face.VertexIndices[1], &face.NormalIndices[1],
-			&face.VertexIndices[2], &face.NormalIndices[2],
+			&v0, &vn0,
+			&v1, &vn1,
+			&v2, &vn1,
 		)
+
+		face.VertexIndices[0] = v0 - c.VertexIndexOffset - 1
+		face.VertexIndices[1] = v1 - c.VertexIndexOffset - 1
+		face.VertexIndices[2] = v2 - c.VertexIndexOffset - 1
+		face.NormalIndices[0] = vn0 - c.VertexNormalOffset - 1
+		face.NormalIndices[1] = vn1 - c.VertexNormalOffset - 1
+		face.NormalIndices[2] = vn2 - c.VertexNormalOffset - 1
 
 	case strings.Contains(line, "/") && strings.Count(line, "/") == 3:
-		_, err = fmt.Sscanf(
-			line, "f %d/%d %d/%d %d/%d",
-			&face.VertexIndices[0], &face.UVs[0],
-			&face.VertexIndices[1], &face.UVs[1],
-			&face.VertexIndices[2], &face.UVs[2],
+		var (
+			v0, v1, v2 int
 		)
 
+		_, err = fmt.Sscanf(
+			line, "f %d/%d %d/%d %d/%d",
+			&v0, &face.UVs[0],
+			&v1, &face.UVs[1],
+			&v2, &face.UVs[2],
+		)
+
+		face.VertexIndices[0] = v0 - c.VertexIndexOffset - 1
+		face.VertexIndices[1] = v1 - c.VertexIndexOffset - 1
+		face.VertexIndices[2] = v2 - c.VertexIndexOffset - 1
+
 	case strings.Contains(line, "/") && strings.Count(line, "/") == 6:
-		var vt0, vt1, vt2 int
+		var (
+			v0, v1, v2    int
+			vt0, vt1, vt2 int
+			vn0, vn1, vn2 int
+		)
 
 		_, err = fmt.Sscanf(
 			line, "f %d/%d/%d %d/%d/%d %d/%d/%d",
-			&face.VertexIndices[0], &vt0, &face.NormalIndices[0],
-			&face.VertexIndices[1], &vt1, &face.NormalIndices[1],
-			&face.VertexIndices[2], &vt2, &face.NormalIndices[2],
+			&v0, &vt0, &vn0,
+			&v1, &vt1, &vn1,
+			&v2, &vt2, &vn2,
 		)
 
-		face.UVs[0] = c.TextureVertices[vt0-1]
-		face.UVs[1] = c.TextureVertices[vt1-1]
-		face.UVs[2] = c.TextureVertices[vt2-1]
+		face.VertexIndices[0] = v0 - c.VertexIndexOffset - 1
+		face.VertexIndices[1] = v1 - c.VertexIndexOffset - 1
+		face.VertexIndices[2] = v2 - c.VertexIndexOffset - 1
+		face.UVs[0] = c.TextureVertices[vt0-c.TextureVertexOffset-1]
+		face.UVs[1] = c.TextureVertices[vt1-c.TextureVertexOffset-1]
+		face.UVs[2] = c.TextureVertices[vt2-c.TextureVertexOffset-1]
+		face.NormalIndices[0] = vn0 - c.VertexNormalOffset - 1
+		face.NormalIndices[1] = vn1 - c.VertexNormalOffset - 1
+		face.NormalIndices[2] = vn2 - c.VertexNormalOffset - 1
 
 	default:
+		var (
+			v0, v1, v2 int
+		)
 		_, err = fmt.Sscanf(
 			line, "f %d %d %d",
-			&face.VertexIndices[0],
-			&face.VertexIndices[1],
-			&face.VertexIndices[2],
+			&v0,
+			&v1,
+			&v2,
 		)
+		face.VertexIndices[0] = v0 - c.VertexIndexOffset - 1
+		face.VertexIndices[1] = v1 - c.VertexIndexOffset - 1
+		face.VertexIndices[2] = v2 - c.VertexIndexOffset - 1
 	}
-
-	// Indices are 1-based in .obj files.
-	face.VertexIndices[0] -= 1
-	face.VertexIndices[1] -= 1
-	face.VertexIndices[2] -= 1
-	face.NormalIndices[0] -= 1
-	face.NormalIndices[1] -= 1
-	face.NormalIndices[2] -= 1
 
 	return face, err
 }
@@ -145,7 +188,7 @@ func parseMtlLibFile(filename string) ([]ObjMaterial, error) {
 
 // LoadObjFile reads a mesh from an .obj file.
 // Format description: https://people.computing.clemson.edu/~dhouse/courses/405/docs/brief-obj-file-format.html
-func LoadObjFile(filename string) (*Mesh, error) {
+func LoadObjFile(filename string, singleMesh bool) (meshes []*Mesh, _ error) {
 	file, err := os.Open(filename)
 	if err != nil {
 		return nil, err
@@ -205,6 +248,13 @@ func LoadObjFile(filename string) (*Mesh, error) {
 				}
 			}
 
+		case strings.HasPrefix(line, "o "):
+			if len(c.Vertices) != 0 && !singleMesh {
+				mesh := NewMesh(c.Vertices, c.VertexNormals, c.Faces)
+				meshes = append(meshes, mesh)
+				c.Clear()
+			}
+
 		case strings.HasPrefix(line, "v "):
 			v, err := parseVertex(line)
 			if err != nil {
@@ -240,5 +290,14 @@ func LoadObjFile(filename string) (*Mesh, error) {
 		}
 	}
 
-	return NewMesh(c.Vertices, c.VertexNormals, c.Faces), nil
+	if len(c.Vertices) != 0 {
+		mesh := NewMesh(c.Vertices, c.VertexNormals, c.Faces)
+		meshes = append(meshes, mesh)
+	}
+
+	if len(meshes) == 0 {
+		return nil, fmt.Errorf("obj file does not have any vertices data")
+	}
+
+	return meshes, nil
 }

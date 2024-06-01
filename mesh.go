@@ -88,15 +88,10 @@ func NewObject(mesh *Mesh) *Object {
 	}
 }
 
-func LoadMeshFile(filename string) (*Mesh, error) {
-	var (
-		mesh *Mesh
-		err  error
-	)
-
+func LoadMeshFile(filename string, singleMesh bool) (meshes []*Mesh, err error) {
 	switch ext := path.Ext(filename); ext {
 	case ".obj":
-		mesh, err = LoadObjFile(filename)
+		meshes, err = LoadObjFile(filename, singleMesh)
 		if err != nil {
 			return nil, err
 		}
@@ -104,7 +99,5 @@ func LoadMeshFile(filename string) (*Mesh, error) {
 		return nil, fmt.Errorf("unsupported mesh format: %s", ext)
 	}
 
-	mesh.Name = path.Base(filename)
-
-	return mesh, nil
+	return meshes, nil
 }
