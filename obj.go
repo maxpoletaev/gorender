@@ -162,6 +162,7 @@ func parseMtlLibFile(filename string) ([]ObjMaterial, error) {
 
 	for scanner.Scan() {
 		line := scanner.Text()
+		line = strings.TrimSpace(line)
 		if len(line) == 0 {
 			continue
 		}
@@ -208,6 +209,7 @@ func LoadObjFile(filename string, singleMesh bool) (meshes []*Mesh, _ error) {
 
 	for scanner.Scan() {
 		line := scanner.Text()
+		line = strings.TrimSpace(line)
 		if len(line) == 0 {
 			continue
 		}
