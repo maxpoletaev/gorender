@@ -90,19 +90,23 @@ func parseFace(c *ObjContext, line string) (Face, error) {
 
 	case strings.Contains(line, "/") && strings.Count(line, "/") == 3:
 		var (
-			v0, v1, v2 int
+			v0, v1, v2    int
+			vt0, vt1, vt2 int
 		)
 
 		_, err = fmt.Sscanf(
 			line, "f %d/%d %d/%d %d/%d",
-			&v0, &face.UVs[0],
-			&v1, &face.UVs[1],
-			&v2, &face.UVs[2],
+			&v0, &vt0,
+			&v1, &vt1,
+			&v2, &vt2,
 		)
 
 		face.VertexIndices[0] = v0 - c.VertexIndexOffset - 1
 		face.VertexIndices[1] = v1 - c.VertexIndexOffset - 1
 		face.VertexIndices[2] = v2 - c.VertexIndexOffset - 1
+		face.UVs[0] = c.TextureVertices[vt0-c.TextureVertexOffset-1]
+		face.UVs[1] = c.TextureVertices[vt1-c.TextureVertexOffset-1]
+		face.UVs[2] = c.TextureVertices[vt2-c.TextureVertexOffset-1]
 
 	case strings.Contains(line, "/") && strings.Count(line, "/") == 6:
 		var (
