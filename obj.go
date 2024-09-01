@@ -68,7 +68,7 @@ func parseFace(c *ObjContext, line string) (Face, error) {
 	)
 
 	switch {
-	case strings.Contains(line, "//"):
+	case strings.Count(line, "//") == 3:
 		var (
 			v0, v1, v2    int
 			vn0, vn1, vn2 int
@@ -88,7 +88,7 @@ func parseFace(c *ObjContext, line string) (Face, error) {
 		face.NormalIndices[1] = vn1 - c.VertexNormalOffset - 1
 		face.NormalIndices[2] = vn2 - c.VertexNormalOffset - 1
 
-	case strings.Contains(line, "/") && strings.Count(line, "/") == 3:
+	case strings.Count(line, "/") == 3:
 		var (
 			v0, v1, v2    int
 			vt0, vt1, vt2 int
@@ -108,7 +108,7 @@ func parseFace(c *ObjContext, line string) (Face, error) {
 		face.UVs[1] = c.TextureVertices[vt1-c.TextureVertexOffset-1]
 		face.UVs[2] = c.TextureVertices[vt2-c.TextureVertexOffset-1]
 
-	case strings.Contains(line, "/") && strings.Count(line, "/") == 6:
+	case strings.Count(line, "/") == 6:
 		var (
 			v0, v1, v2    int
 			vt0, vt1, vt2 int

@@ -1,18 +1,18 @@
-# goxgl
+# gorender
 
-A purely software (no OpenGL or DirectX) realtime 3D renderer, that I’m trying
-to build to learn some math and magic behind 3D graphics. It uses raylib for window
-management and delivering pixels to the screen, but all the rendering is done
-from scratch in Go with no external libraries.
+A purely software (no OpenGL or DirectX) realtime 3D renderer, that I built
+to learn some math and magic behind 3D graphics. It uses raylib for window
+management and framebuffer access, but all the rendering is done from scratch
+in Go without relying on third-party libraries.
 
-Running in multi-core mode at 1280×720 resolution on my laptop, it maintains
-95-105 FPS for an untextured object made of 200K triangles. Not counting the
-culled ones, this results in pushing around 10 million triangles per second to
-the screen.
+While the project is fairly simple overall, it includes some nifty optimizations,
+such as parallel tiled rendering, optimal use of CPU caches, and leveraging SIMD
+operations on AMD64 via some assembly code. On my laptop (MBP Intel machine),
+it can deliver about 10 million untextured triangles per second at 1280×720
+resolution. This results in frame rate of 95-105 FPS for a single object scene
+composed of 200k triangles.
 
-https://github.com/maxpoletaev/goxgl/assets/1812128/985253cc-a0fc-4972-88c9-ef51d6f03af0
-
-*Sonic-HD 3D model by alexandelyt ([Sketchfab](https://sketchfab.com/3d-models/sonic-hd-c23cead36d9349988a4981b92eabf208))*
+https://github.com/maxpoletaev/gorender/assets/1812128/985253cc-a0fc-4972-88c9-ef51d6f03af0
 
 ## Building
 
@@ -20,13 +20,19 @@ For this, you may need a C compiler and additional dependencies required by
 raylib. See https://github.com/gen2brain/raylib-go#requirements for details.
 
 ```
-$ make build
+make build
+```
+
+For no-assembly version:
+
+```
+make build_noasm
 ```
 
 ## Running
 
 ```
-$ ./goxgl models/suzanne.obj
+$ ./gorender models/suzanne.obj
 ```
 
 Camera uses WASD + mouse to move around (like in most first-person games). ESC
@@ -60,8 +66,8 @@ options like wireframe, texturing, backface culling, etc.
 
 ## Assets
 
-* [Doom E1M1: Hangar - Map (.obj)](https://sketchfab.com/3d-models/doom-e1m1-hangar-map-2148fb6a3fe7454b901fcea67d70b318) by pancakesbassoondonut
 * [16x16 pixel textures](https://piiixl.itch.io/textures) by PiiiXL
+* [Sonic-HD 3D model](https://sketchfab.com/3d-models/sonic-hd-c23cead36d9349988a4981b92eabf208) by alexandelyt
 
 [CIY-1]: https://www.youtube.com/watch?v=ih20l3pJoeU&list=PLrOv9FMX8xJE8NgepZR1etrsU63fDDGxO&index=22&t=1938s&pp=iAQB
 [CIY-2]: https://www.youtube.com/watch?v=XgMWc6LumG4&list=PLrOv9FMX8xJE8NgepZR1etrsU63fDDGxO&index=23&pp=iAQB

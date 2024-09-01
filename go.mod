@@ -1,4 +1,4 @@
-module github.com/maxpoletaev/goxgl
+module github.com/maxpoletaev/gorender
 
 go 1.22.1
 

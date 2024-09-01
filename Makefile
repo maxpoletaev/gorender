@@ -2,7 +2,6 @@
 
 TEST_PACKAGE = ./...
 PWD = $(shell pwd)
-GO_MODULE = github.com/maxpoletaev/goxgl
 COMMIT_HASH = $(shell git rev-parse --short HEAD)
 
 .PHONY: help
@@ -14,17 +13,17 @@ help: ## print help (this message)
 .PHONY: build
 build: ## build binary
 	@echo "--------- running: $@ ---------"
-	CGO_ENABLED=1 GODEBUG=cgocheck=0 go build -o=goxgl -pgo=default.pgo
+	CGO_ENABLED=1 GODEBUG=cgocheck=0 go build -o=gorender -pgo=default.pgo
 
 .PHONY: build_noasm
 build_noasm: ## build without assembly
 	@echo "--------- running: $@ ---------"
-	CGO_ENABLED=1 GODEBUG=cgocheck=0 go build -o=goxgl -tags=noasm -pgo=default.pgo
+	CGO_ENABLED=1 GODEBUG=cgocheck=0 go build -o=gorender -tags=purego -pgo=default.pgo
 
 .PHONY: build
 build_debug: ## build with additional checks
 	@echo "--------- running: $@ ---------"
-	GOARCH=amd64 CGO_ENABLED=1 GODEBUG=cgocheck=0 go build -o=goxgl -pgo=default.pgo -gcflags="-m -d=ssa/check_bce" 2>&1 | tee build.log
+	GOARCH=amd64 CGO_ENABLED=1 GODEBUG=cgocheck=0 go build -o=gorender -pgo=default.pgo -gcflags="-m -d=ssa/check_bce" 2>&1 | tee build.log
 	go-escape-lint -f build.log
 
 PHONY: test

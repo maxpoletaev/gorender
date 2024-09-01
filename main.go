@@ -18,7 +18,7 @@ const (
 	viewHeight      = 600 / downscaleFactor
 	parallel        = true
 	frameRate       = 60
-	windowTitle     = "goxgl"
+	windowTitle     = "gorender"
 	demoMode        = true
 )
 
